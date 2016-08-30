@@ -1,0 +1,6 @@
+﻿@model List<Track>
+
+    @foreach (var item in Model)
+    {
+        <div><div class="col-lg-4">@item.name</div><div class="col-lg-4">@item.artists.FirstOrDefault().name</div><div class="col-lg-2"><a href="@item.preview_url" target="popup" onclick="window.open('@item.preview_url','popup','width=300,height=100')">Provlyssna</a></div></div>
+    }
