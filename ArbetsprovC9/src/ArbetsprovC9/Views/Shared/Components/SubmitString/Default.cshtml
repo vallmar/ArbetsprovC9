@@ -1,0 +1,14 @@
+﻿@model StrangeModel
+
+<style>
+    #refineMusicBtn{
+        float:right;
+        margin:3px;
+    }
+</style>
+<form asp-controller="Suggestion" asp-action="Refinedsuggestion">
+    <input id="trackIds" asp-for="TrackIdString" class="form-control" type="hidden">
+    <br />
+    <span asp-validation-for="TrackIdString"></span>
+    <input type="Submit" class="btn btn-success" id="refineMusicBtn" value="Find my favorite songs" />
+</form>

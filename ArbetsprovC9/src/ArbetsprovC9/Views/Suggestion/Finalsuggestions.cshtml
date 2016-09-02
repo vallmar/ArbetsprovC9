@@ -1,0 +1,17 @@
+﻿@model List<Track>
+<style>
+    .heading {
+        border-bottom: 5px solid;
+    }
+    .songs{
+        margin:4px;
+    }
+</style>
+<h3>Skräddarsydda låtval, bara för dig</h3>
+<div class="songs">
+    <div><div class="col-xs-5 heading">Låt titel</div><div class="col-xs-4 heading">Artist</div><div class="col-xs-2 heading">Sample</div><div class="col-xs-1 heading">Favoriter</div></div>
+    @foreach (var item in Model)
+    {
+        <div class="oneSong" id="@item.id"><div class="col-xs-5">@item.name</div><div class="col-xs-4">@item.artists.FirstOrDefault().name</div><div class="col-xs-2"><a href="@item.preview_url" target="popup" onclick="window.open('@item.preview_url','popup','width=300,height=100')">Provlyssna</a></div><div class="col-xs-1"><input type="checkbox" class="liked" /></div></div>
+    }
+</div>

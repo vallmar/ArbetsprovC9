@@ -1,6 +1,37 @@
 ﻿@model List<Track>
+<style>
+    .heading{
+        border-bottom:5px solid; 
+    }
+</style>
 
+<h4 class="col-xs-8">Här är ett stärre urval av låtar baserade på din favoriartist. Provlyssna på alla eller på några, de du tycker om bockar du för. Längst ner kan du sen förfina din musiksökning ytteligare.
+    Bocka för minst tre låtar för ett relevant resultat</h4>
+<div class="songs">
+    <div><div class="col-xs-5 heading">Låt titel</div><div class="col-xs-4 heading">Artist</div><div class="col-xs-2 heading">Sample</div><div class="col-xs-1 heading">Favoriter</div></div>
     @foreach (var item in Model)
     {
-        <div><div class="col-lg-4">@item.name</div><div class="col-lg-4">@item.artists.FirstOrDefault().name</div><div class="col-lg-2"><a href="@item.preview_url" target="popup" onclick="window.open('@item.preview_url','popup','width=300,height=100')">Provlyssna</a></div></div>
+        <div class="oneSong" id="@item.id"><div class="col-xs-5">@item.name</div><div class="col-xs-4">@item.artists.FirstOrDefault().name</div><div class="col-xs-2"><a href="@item.preview_url" target="popup" onclick="window.open('@item.preview_url','popup','width=300,height=100')">Provlyssna</a></div><div class="col-xs-1"><input type="checkbox" class="liked" /></div></div>
     }
+</div>
+@await Component.InvokeAsync("SubmitString");
+
+    <script>
+        $(document).ready(function () {
+            //var likedSong = [];
+            $(".liked").change(function () {
+            var trackIds = $("#trackIds");
+            trackIds.val(trackIds.val() + $(this).parent().parent().prop("id")+",");
+                //$("#trackIds").value + "," + $(this).parent().parent().prop("id")
+            })
+            //$("#refineMusicBtn").click(function () {
+            //    alert("Hey");
+            //    $.each($(".liked"), function () {
+            //        if ($(this).is(':checked')) {
+            //            likedSong.push($(this).parent().parent().prop("id"));
+            //        }
+            //    });
+            //    $.post("/suggestion/refinedsuggestion", { "trackIds": likedSong });
+            //});
+        })
+    </script>

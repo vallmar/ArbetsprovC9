@@ -1,0 +1,24 @@
+﻿@model Konsult
+<style>
+    #submitButton {
+        float: right;
+    }
+</style>
+    <form asp-controller="Consult" asp-action="EditConsult">
+        <div class="col-xs-6">
+            <input asp-for="ID" type="hidden" class="inputId"/>
+            <label asp-for="Name"></label>
+            <br />
+            <input asp-for="Name" class="form-control inputName">
+            <span asp-validation-for="Name"></span>
+        </div>
+        <div class="col-xs-6">
+            <label asp-for="ReqruitmentDate"></label>
+            <br />
+            <input asp-for="ReqruitmentDate" class="form-control inputReq" />
+            <span asp-validation-for="ReqruitmentDate"></span>
+        </div>
+        <div id="validation" asp-validation-summary="All"></div>
+        <br />
+        <input type="submit" value="Edit consult" class="btn btn-success" id="submitButton" />
+    </form>

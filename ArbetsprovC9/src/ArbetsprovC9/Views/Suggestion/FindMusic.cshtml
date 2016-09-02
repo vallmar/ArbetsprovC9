@@ -1,23 +1,13 @@
 ﻿@model FirstQuestionsVM
 
+<h4>Fyll i din favoritartist för att börja sökningen efter din drömlåt</h4>
+
 <div class="container">
     <form asp-controller="Suggestion" asp-action="FindMusic">
         <br />
         <label asp-for="FavoriteArtist"></label>
-        <input id="tournamentName" asp-for="FavoriteArtist" class="form-control">
+        <input id="tournamentName" asp-for="FavoriteArtist" class="form-control" placeholder="Håkan Hellström">
         <span asp-validation-for="FavoriteArtist"></span>
-        <br />
-        <label asp-for="FavoriteCentury"></label>
-        <input asp-for="FavoriteCentury" class="form-control" id="toursize" />
-        <span asp-validation-for="FavoriteCentury"></span>
-        <br />
-        <label asp-for="Mood"></label>
-        <select name="styleList" id="selectTourStyle">
-            <option>Seriespel</option>
-            <option>Gruppspel</option>
-            <option>Utslagsturnering</option>
-        </select>
-        <span asp-validation-for="Mood"></span>
         <br />
         <div style="float:right; margin-bottom:3%">
             <input type="submit" class="btn btn-success" value="Hitta musik" />
