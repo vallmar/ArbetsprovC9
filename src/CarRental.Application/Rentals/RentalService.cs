@@ -33,14 +33,9 @@ public sealed class RentalService(IRentalRepository repository, PriceCalculator 
         var rental = await repository.GetByBookingNumberAsync(bookingNumber, cancellationToken)
             ?? throw new KeyNotFoundException($"Rental '{bookingNumber}' was not found.");
 
-        if (rental.IsReturned)
-            throw new InvalidOperationException("Rental has already been returned.");
-
-        // Calculate using a temporary returned state, then persist the final price.
-        rental.Return(returnTime, returnOdometer, 0m);
+        rental.Return(returnTime, returnOdometer);
         var price = priceCalculator.Calculate(rental, pricing);
         rental.SetFinalPrice(price);
-
         await repository.UpdateAsync(rental, cancellationToken);
         return price;
     }
