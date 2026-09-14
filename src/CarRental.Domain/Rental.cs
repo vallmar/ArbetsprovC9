@@ -30,15 +30,20 @@ public sealed class Rental
         PickupOdometer = pickupOdometer;
     }
 
-    public void Return(DateTimeOffset returnTime, int returnOdometer, decimal finalPrice)
+    public void Return(DateTimeOffset returnTime, int returnOdometer)
     {
         if (IsReturned) throw new InvalidOperationException("Rental has already been returned.");
         if (returnTime < PickupTime) throw new ArgumentException("Return time cannot be before pickup time.", nameof(returnTime));
         if (returnOdometer < PickupOdometer) throw new ArgumentOutOfRangeException(nameof(returnOdometer));
-        if (finalPrice < 0) throw new ArgumentOutOfRangeException(nameof(finalPrice));
 
         ReturnTime = returnTime;
         ReturnOdometer = returnOdometer;
+    }
+
+    public void SetFinalPrice(decimal finalPrice)
+    {
+        if (!IsReturned) throw new InvalidOperationException("A rental must be returned before a final price can be set.");
+        if (finalPrice < 0) throw new ArgumentOutOfRangeException(nameof(finalPrice));
         FinalPrice = finalPrice;
     }
 }
