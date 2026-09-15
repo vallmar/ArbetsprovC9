@@ -11,6 +11,12 @@ public sealed class InMemoryRentalRepository : IRentalRepository
     public Task<Rental?> GetByBookingNumberAsync(string tenantId, string bookingNumber, CancellationToken cancellationToken = default)
         => Task.FromResult(rentals.GetValueOrDefault((tenantId, bookingNumber)));
 
+    public Task<string?> GetOwnerTenantIdByBookingNumberAsync(string bookingNumber, CancellationToken cancellationToken = default)
+    {
+        var match = rentals.Keys.FirstOrDefault(key => key.BookingNumber == bookingNumber);
+        return Task.FromResult(match == default ? null : match.TenantId);
+    }
+
     public Task AddAsync(Rental rental, CancellationToken cancellationToken = default)
     {
         if (!rentals.TryAdd((rental.TenantId, rental.BookingNumber), rental))
