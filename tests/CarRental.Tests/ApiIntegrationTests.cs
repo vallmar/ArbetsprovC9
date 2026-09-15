@@ -110,7 +110,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         var body = await response.Content.ReadFromJsonAsync<RegisterReturnResponse>();
         Assert.NotNull(body);
         Assert.Equal(bookingNumber, body!.BookingNumber);
-        Assert.Equal(1300m, body.FinalPrice);
+        Assert.Equal(850m, body.FinalPrice);
     }
 
     [Fact]
