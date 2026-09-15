@@ -15,7 +15,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.Services.AddSingleton<IRentalRepository, InMemoryRentalRepository>();
 builder.Services.AddSingleton<PriceCalculator>();
-builder.Services.AddScoped<ITenantContext, ApiTenantContext>();
+builder.Services.AddScoped<ApiTenantContext>();
+builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<ApiTenantContext>());
 builder.Services.AddScoped<RentalService>();
 
 var app = builder.Build();
@@ -122,7 +123,7 @@ public partial class Program
     };
 }
 
-file sealed class ApiTenantContext : ITenantContext
+public sealed class ApiTenantContext : ITenantContext
 {
     public string TenantId { get; private set; } = string.Empty;
 
@@ -131,28 +132,31 @@ file sealed class ApiTenantContext : ITenantContext
 
 file sealed class TenantContextMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext)
+    public async Task InvokeAsync(HttpContext context, ApiTenantContext tenantContext)
     {
         if (!context.Request.Headers.TryGetValue("Authorization", out var authorization)
             || authorization.Count != 1
             || !authorization[0].StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.Headers.WWWAuthenticate = "Bearer";
-            await Results.Json(new ErrorResponse("Tenant identity is required.")).ExecuteAsync(context);
+            await UnauthorizedAsync(context);
             return;
         }
 
         var tenantId = authorization[0]["Bearer ".Length..].Trim();
         if (string.IsNullOrWhiteSpace(tenantId))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.Headers.WWWAuthenticate = "Bearer";
-            await Results.Json(new ErrorResponse("Tenant identity is required.")).ExecuteAsync(context);
+            await UnauthorizedAsync(context);
             return;
         }
 
-        ((ApiTenantContext)tenantContext).SetTenant(tenantId);
+        tenantContext.SetTenant(tenantId);
         await next(context);
+    }
+
+    private static async Task UnauthorizedAsync(HttpContext context)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        context.Response.Headers.WWWAuthenticate = "Bearer";
+        await Results.Json(new ErrorResponse("Tenant identity is required.")).ExecuteAsync(context);
     }
 }
