@@ -1,6 +1,6 @@
 # Car Rental SaaS Reference Architecture
 
-This repository is a reference implementation of the car-rental candidate assignment.
+This repository is a reference implementation of a car-rental system.
 
 The point is not to build a large rental system. The point is to keep the rental business rules small, testable and independent from customer UI and persistence choices.
 
