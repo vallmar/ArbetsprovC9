@@ -1,10 +1,15 @@
 using CarRental.Application.Ports;
 using CarRental.Application.Pricing;
 using CarRental.Domain;
+using Microsoft.Extensions.Logging;
 
 namespace CarRental.Application.Rentals;
 
-public sealed class RentalService(IRentalRepository repository, PriceCalculator priceCalculator, ITenantContext tenantContext)
+public sealed class RentalService(
+    IRentalRepository repository,
+    PriceCalculator priceCalculator,
+    ITenantContext tenantContext,
+    ILogger<RentalService> logger)
 {
     public async Task<Rental> RegisterPickupAsync(
         string bookingNumber,
@@ -30,8 +35,21 @@ public sealed class RentalService(IRentalRepository repository, PriceCalculator 
         CarRental.Domain.Pricing pricing,
         CancellationToken cancellationToken = default)
     {
-        var rental = await repository.GetByBookingNumberAsync(tenantContext.TenantId, bookingNumber, cancellationToken)
-            ?? throw new KeyNotFoundException($"Rental '{bookingNumber}' was not found.");
+        var rental = await repository.GetByBookingNumberAsync(tenantContext.TenantId, bookingNumber, cancellationToken);
+        if (rental is null)
+        {
+            var ownerTenantId = await repository.GetOwnerTenantIdByBookingNumberAsync(bookingNumber, cancellationToken);
+            if (ownerTenantId is not null && !string.Equals(ownerTenantId, tenantContext.TenantId, StringComparison.Ordinal))
+            {
+                logger.LogWarning(
+                    "Cross-tenant rental access attempt blocked. Tenant {TenantId} attempted to access booking {BookingNumber} owned by tenant {OwnerTenantId}.",
+                    tenantContext.TenantId,
+                    bookingNumber,
+                    ownerTenantId);
+            }
+
+            throw new KeyNotFoundException($"Rental '{bookingNumber}' was not found.");
+        }
 
         rental.Return(returnTime, returnOdometer);
         var price = priceCalculator.Calculate(rental, pricing);
