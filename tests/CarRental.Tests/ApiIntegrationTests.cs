@@ -88,7 +88,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         }, CustomerJsonOptions);
 
         using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-        var response = await client.PostAsync("/api/rentals/pickup", content);
+        var response = await client.PostAsync("/api/rentals/pickup", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
