@@ -193,8 +193,6 @@ public sealed class ApiTenantContext : ITenantContext
 }
 
 file sealed record DemoClient(string ClientSecret);
-file sealed record TokenRequest(string ClientId, string ClientSecret);
-file sealed record TokenResponse(string AccessToken, string TokenType, int ExpiresIn);
 
 file sealed class TenantContextMiddleware(RequestDelegate next)
 {
@@ -206,7 +204,7 @@ file sealed class TenantContextMiddleware(RequestDelegate next)
             return;
         }
 
-        if (!context.User.Identity?.IsAuthenticated ?? true)
+        if (context.User.Identity?.IsAuthenticated != true)
         {
             await UnauthorizedAsync(context);
             return;
