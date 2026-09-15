@@ -15,6 +15,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.Services.AddSingleton<IRentalRepository, InMemoryRentalRepository>();
 builder.Services.AddSingleton<PriceCalculator>();
+builder.Services.AddScoped<ITenantContext, ApiTenantContext>();
 builder.Services.AddScoped<RentalService>();
 
 var app = builder.Build();
@@ -40,6 +41,8 @@ app.UseExceptionHandler(errorApp =>
         await Results.Json(new ErrorResponse("An unexpected error occurred.")).ExecuteAsync(context);
     });
 });
+
+app.UseMiddleware<TenantContextMiddleware>();
 
 app.MapPost("/api/rentals/pickup", async (RegisterPickupRequest request, RentalService service, CancellationToken ct) =>
 {
@@ -117,4 +120,39 @@ public partial class Program
         CarCategory.Truck => ContractCarCategory.Truck,
         _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
     };
+}
+
+file sealed class ApiTenantContext : ITenantContext
+{
+    public string TenantId { get; private set; } = string.Empty;
+
+    public void SetTenant(string tenantId) => TenantId = tenantId;
+}
+
+file sealed class TenantContextMiddleware(RequestDelegate next)
+{
+    public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext)
+    {
+        if (!context.Request.Headers.TryGetValue("Authorization", out var authorization)
+            || authorization.Count != 1
+            || !authorization[0].StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.Headers.WWWAuthenticate = "Bearer";
+            await Results.Json(new ErrorResponse("Tenant identity is required.")).ExecuteAsync(context);
+            return;
+        }
+
+        var tenantId = authorization[0]["Bearer ".Length..].Trim();
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.Headers.WWWAuthenticate = "Bearer";
+            await Results.Json(new ErrorResponse("Tenant identity is required.")).ExecuteAsync(context);
+            return;
+        }
+
+        ((ApiTenantContext)tenantContext).SetTenant(tenantId);
+        await next(context);
+    }
 }
