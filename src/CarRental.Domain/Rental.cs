@@ -17,10 +17,10 @@ public sealed class Rental
     public Rental(string bookingNumber, string registrationNumber, string customerIdentifier,
         CarCategory category, DateTimeOffset pickupTime, int pickupOdometer)
     {
-        if (string.IsNullOrWhiteSpace(bookingNumber)) throw new ArgumentException("Booking number is required.", nameof(bookingNumber));
-        if (string.IsNullOrWhiteSpace(registrationNumber)) throw new ArgumentException("Registration number is required.", nameof(registrationNumber));
-        if (string.IsNullOrWhiteSpace(customerIdentifier)) throw new ArgumentException("Customer identifier is required.", nameof(customerIdentifier));
-        if (pickupOdometer < 0) throw new ArgumentOutOfRangeException(nameof(pickupOdometer));
+        if (string.IsNullOrWhiteSpace(bookingNumber)) throw new ArgumentException("Booking number is required.");
+        if (string.IsNullOrWhiteSpace(registrationNumber)) throw new ArgumentException("Registration number is required.");
+        if (string.IsNullOrWhiteSpace(customerIdentifier)) throw new ArgumentException("Customer identifier is required.");
+        if (pickupOdometer < 0) throw new ArgumentOutOfRangeException(nameof(pickupOdometer), "Pickup odometer cannot be negative.");
 
         BookingNumber = bookingNumber;
         RegistrationNumber = registrationNumber;
@@ -33,8 +33,9 @@ public sealed class Rental
     public void Return(DateTimeOffset returnTime, int returnOdometer)
     {
         if (IsReturned) throw new InvalidOperationException("Rental has already been returned.");
-        if (returnTime < PickupTime) throw new ArgumentException("Return time cannot be before pickup time.", nameof(returnTime));
-        if (returnOdometer < PickupOdometer) throw new ArgumentOutOfRangeException(nameof(returnOdometer));
+        if (returnTime < PickupTime) throw new ArgumentException("Return time cannot be before pickup time.");
+        if (returnOdometer < PickupOdometer)
+            throw new ArgumentOutOfRangeException(nameof(returnOdometer), "Return odometer cannot be lower than pickup odometer.");
 
         ReturnTime = returnTime;
         ReturnOdometer = returnOdometer;
@@ -43,7 +44,8 @@ public sealed class Rental
     public void SetFinalPrice(decimal finalPrice)
     {
         if (!IsReturned) throw new InvalidOperationException("A rental must be returned before a final price can be set.");
-        if (finalPrice < 0) throw new ArgumentOutOfRangeException(nameof(finalPrice));
+        if (finalPrice < 0)
+            throw new ArgumentOutOfRangeException(nameof(finalPrice), "Final price cannot be negative.");
         FinalPrice = finalPrice;
     }
 }
