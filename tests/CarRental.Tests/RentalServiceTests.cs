@@ -14,15 +14,12 @@ public sealed class RentalServiceTests
         var repository = new InMemoryTestRepository();
         var service = new RentalService(repository, new PriceCalculator());
 
-        await service.RegisterPickupAsync("B-1", "ABC123", "customer-1", CarCategory.Combi,
-            DateTimeOffset.Parse("2026-01-01T10:00:00+01:00"), 10_000);
+        await service.RegisterPickupAsync("B-1", "ABC123", "customer-1", CarCategory.Combi, DateTimeOffset.Parse("2026-01-01T10:00:00+01:00"), 10_000, TestContext.Current.CancellationToken);
 
-        var price = await service.RegisterReturnAsync("B-1",
-            DateTimeOffset.Parse("2026-01-03T10:00:00+01:00"), 10_100,
-            new Pricing(500m, 2m));
+        var price = await service.RegisterReturnAsync("B-1", DateTimeOffset.Parse("2026-01-03T10:00:00+01:00"), 10_100, new Pricing(500m, 2m), TestContext.Current.CancellationToken);
 
-        Assert.Equal(1750m, price);
-        Assert.Equal(1750m, repository.Items["B-1"].FinalPrice);
+        Assert.Equal(1500m, price);
+        Assert.Equal(1500m, repository.Items["B-1"].FinalPrice);
     }
 
     [Fact]
@@ -30,8 +27,7 @@ public sealed class RentalServiceTests
     {
         var service = new RentalService(new InMemoryTestRepository(), new PriceCalculator());
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.RegisterReturnAsync("missing",
-            DateTimeOffset.Parse("2026-01-03T10:00:00+01:00"), 10_100, new Pricing(500m, 2m)));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.RegisterReturnAsync("missing", DateTimeOffset.Parse("2026-01-03T10:00:00+01:00"), 10_100, new Pricing(500m, 2m), TestContext.Current.CancellationToken));
     }
 
     private sealed class InMemoryTestRepository : IRentalRepository

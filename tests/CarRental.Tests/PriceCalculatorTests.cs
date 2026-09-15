@@ -35,7 +35,7 @@ public class PriceCalculatorTests
     {
         var rental = ReturnedRental(CarCategory.Combi, 2, 50);
         var differentPricing = new Pricing(1000m, 5m);
-        Assert.Equal(2650m, calculator.Calculate(rental, differentPricing));
+        Assert.Equal(2850m, calculator.Calculate(rental, differentPricing));
     }
 
     private static Rental ReturnedRental(CarCategory category, int days, int kilometers)

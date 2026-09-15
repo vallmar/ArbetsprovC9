@@ -4,8 +4,14 @@ using CarRental.Application.Rentals;
 using CarRental.Contracts;
 using CarRental.Domain;
 using CarRental.Infrastructure.InMemory;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 builder.Services.AddSingleton<IRentalRepository, InMemoryRentalRepository>();
 builder.Services.AddSingleton<PriceCalculator>();
 builder.Services.AddScoped<RentalService>();
