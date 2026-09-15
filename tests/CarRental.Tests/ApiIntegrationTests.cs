@@ -11,7 +11,6 @@ namespace CarRental.Tests;
 
 public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    // Match ASP.NET's web JSON defaults used by the real API: camelCase properties + string enums.
     private static readonly JsonSerializerOptions CustomerJsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() }
@@ -239,14 +238,14 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
-    private Task<HttpResponseMessage> PostAsCustomerJsonAsync<T>(string uri, T value, string tenantId = "tenant-a")
+    private async Task<HttpResponseMessage> PostAsCustomerJsonAsync<T>(string uri, T value, string tenantId = "tenant-a")
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
             Content = JsonContent.Create(value, options: CustomerJsonOptions)
         };
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tenantId);
-        return client.SendAsync(request, TestContext.Current.CancellationToken);
+        return await client.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
     private static Task<T?> ReadCustomerJsonAsync<T>(HttpResponseMessage response)
