@@ -27,7 +27,7 @@ public sealed class RentalService(IRentalRepository repository, PriceCalculator 
         string bookingNumber,
         DateTimeOffset returnTime,
         int returnOdometer,
-        Pricing pricing,
+        CarRental.Domain.Pricing pricing,
         CancellationToken cancellationToken = default)
     {
         var rental = await repository.GetByBookingNumberAsync(bookingNumber, cancellationToken)
