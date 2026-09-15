@@ -1,0 +1,49 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio / Rider / VS Code user files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build logs and test results
+*.log
+TestResults/
+coverage/
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local development files
+*.local.json
+*.local.*.json
+appsettings.Local.json
+
+# Customer sample runtime data
+customers/CustomerA.JsonConsole/*.json
+
+# Database / container local state
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets / credentials
+.env
+.env.*
+!*.env.example
+
+# Publish output
+publish/
+wwwroot/
