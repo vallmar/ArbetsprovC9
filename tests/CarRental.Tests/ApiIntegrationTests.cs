@@ -25,6 +25,19 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     }
 
     [Fact]
+    public async Task Pickup_requires_tenant_identity()
+    {
+        var bookingNumber = NewBookingNumber();
+        var request = new RegisterPickupRequest(bookingNumber, "ABC123", "customer-a", ContractCarCategory.SmallCar, DateTimeOffset.Parse("2026-09-15T10:00:00Z"), 10000);
+
+        using var content = JsonContent.Create(request, options: CustomerJsonOptions);
+        var response = await client.PostAsync("/api/rentals/pickup", content, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True(response.Headers.WwwAuthenticate.Any(h => h.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
     public async Task Pickup_returns_201_and_customer_response_contract()
     {
         var bookingNumber = NewBookingNumber();
@@ -59,6 +72,34 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     }
 
     [Fact]
+    public async Task Same_booking_number_can_exist_in_different_tenants()
+    {
+        var bookingNumber = NewBookingNumber();
+        var request = new RegisterPickupRequest(bookingNumber, "ABC123", "customer-a", ContractCarCategory.SmallCar, DateTimeOffset.Parse("2026-09-15T10:00:00Z"), 10000);
+
+        var tenantAResponse = await PostAsCustomerJsonAsync("/api/rentals/pickup", request, "tenant-a");
+        var tenantBResponse = await PostAsCustomerJsonAsync("/api/rentals/pickup", request, "tenant-b");
+
+        Assert.Equal(HttpStatusCode.Created, tenantAResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, tenantBResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Tenant_cannot_return_another_tenants_rental()
+    {
+        var bookingNumber = NewBookingNumber();
+        await RegisterPickupAsync(bookingNumber, ContractCarCategory.Combi, 10000, "tenant-a");
+
+        var request = new RegisterReturnRequest(DateTimeOffset.Parse("2026-09-15T18:00:00Z"), 10100, 500m, 2m);
+        var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request, "tenant-b");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
+        Assert.NotNull(error);
+        Assert.Equal($"Rental '{bookingNumber}' was not found.", error!.Error);
+    }
+
+    [Fact]
     public async Task Pickup_accepts_documented_json_structure_and_case_insensitive_property_names()
     {
         var bookingNumber = NewBookingNumber();
@@ -74,7 +115,9 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         """;
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await client.PostAsync("/api/rentals/pickup", content, TestContext.Current.CancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/rentals/pickup") { Content = content };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "tenant-a");
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
@@ -120,7 +163,9 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         """;
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await client.PostAsync($"/api/rentals/{bookingNumber}/return", content, TestContext.Current.CancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rentals/{bookingNumber}/return") { Content = content };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "tenant-a");
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -187,15 +232,22 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Equal("Return odometer cannot be lower than pickup odometer.", error!.Error);
     }
 
-    private async Task RegisterPickupAsync(string bookingNumber, ContractCarCategory category, int odometer)
+    private async Task RegisterPickupAsync(string bookingNumber, ContractCarCategory category, int odometer, string tenantId = "tenant-a")
     {
         var request = new RegisterPickupRequest(bookingNumber, "ABC123", "customer-a", category, DateTimeOffset.Parse("2026-09-15T10:00:00Z"), odometer);
-        var response = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
+        var response = await PostAsCustomerJsonAsync("/api/rentals/pickup", request, tenantId);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
-    private Task<HttpResponseMessage> PostAsCustomerJsonAsync<T>(string uri, T value)
-        => client.PostAsJsonAsync(uri, value, CustomerJsonOptions);
+    private Task<HttpResponseMessage> PostAsCustomerJsonAsync<T>(string uri, T value, string tenantId = "tenant-a")
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = JsonContent.Create(value, options: CustomerJsonOptions)
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tenantId);
+        return client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
 
     private static Task<T?> ReadCustomerJsonAsync<T>(HttpResponseMessage response)
         => response.Content.ReadFromJsonAsync<T>(CustomerJsonOptions);
