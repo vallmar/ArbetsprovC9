@@ -12,7 +12,10 @@ public sealed class PriceCalculator
         if (!rental.IsReturned || rental.ReturnTime is null || rental.ReturnOdometer is null)
             throw new InvalidOperationException("Cannot calculate the final rental price before return.");
 
-        var days = Math.Max(1, (int)Math.Ceiling((rental.ReturnTime.Value - rental.PickupTime).TotalDays));
+        // Rental times are DateTimeOffset values, so subtraction is based on the actual instants
+        // in time rather than local clock times or machine time zones.
+        var elapsed = rental.ReturnTime.Value - rental.PickupTime;
+        var days = Math.Max(1, (int)Math.Ceiling(elapsed.TotalDays));
         var kilometers = rental.ReturnOdometer.Value - rental.PickupOdometer;
 
         return rental.Category switch
