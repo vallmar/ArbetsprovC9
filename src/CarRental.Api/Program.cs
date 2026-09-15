@@ -1,6 +1,7 @@
 using CarRental.Application.Ports;
 using CarRental.Application.Pricing;
 using CarRental.Application.Rentals;
+using CarRental.Contracts;
 using CarRental.Domain;
 using CarRental.Infrastructure.InMemory;
 
@@ -19,16 +20,25 @@ app.MapPost("/api/rentals/pickup", async (RegisterPickupRequest request, RentalS
             request.BookingNumber,
             request.RegistrationNumber,
             request.CustomerIdentifier,
-            request.Category,
+            ToDomainCategory(request.Category),
             request.PickupTime,
             request.PickupOdometer,
             ct);
 
-        return Results.Created($"/api/rentals/{rental.BookingNumber}", rental);
+        var response = new RegisterPickupResponse(
+            rental.BookingNumber,
+            rental.RegistrationNumber,
+            rental.CustomerIdentifier,
+            ToContractCategory(rental.Category),
+            rental.PickupTime,
+            rental.PickupOdometer,
+            rental.IsReturned);
+
+        return Results.Created($"/api/rentals/{rental.BookingNumber}", response);
     }
     catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.BadRequest(new ErrorResponse(ex.Message));
     }
 });
 
@@ -36,32 +46,39 @@ app.MapPost("/api/rentals/{bookingNumber}/return", async (string bookingNumber, 
 {
     try
     {
-        var price = await service.RegisterReturnAsync(bookingNumber, request.ReturnTime, request.ReturnOdometer,
-            new Pricing(request.BaseDailyPrice, request.BaseKmPrice), ct);
-        return Results.Ok(new { bookingNumber, finalPrice = price });
+        var price = await service.RegisterReturnAsync(
+            bookingNumber,
+            request.ReturnTime,
+            request.ReturnOdometer,
+            new Pricing(request.BaseDailyPrice, request.BaseKmPrice),
+            ct);
+
+        return Results.Ok(new RegisterReturnResponse(bookingNumber, price));
     }
     catch (KeyNotFoundException ex)
     {
-        return Results.NotFound(new { error = ex.Message });
+        return Results.NotFound(new ErrorResponse(ex.Message));
     }
     catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
     {
-        return Results.BadRequest(new { error = ex.Message });
+        return Results.BadRequest(new ErrorResponse(ex.Message));
     }
 });
 
 app.Run();
 
-public record RegisterPickupRequest(
-    string BookingNumber,
-    string RegistrationNumber,
-    string CustomerIdentifier,
-    CarCategory Category,
-    DateTimeOffset PickupTime,
-    int PickupOdometer);
+static CarCategory ToDomainCategory(RentalCarCategory category) => category switch
+{
+    RentalCarCategory.SmallCar => CarCategory.SmallCar,
+    RentalCarCategory.Combi => CarCategory.Combi,
+    RentalCarCategory.Truck => CarCategory.Truck,
+    _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
+};
 
-public record RegisterReturnRequest(
-    DateTimeOffset ReturnTime,
-    int ReturnOdometer,
-    decimal BaseDailyPrice,
-    decimal BaseKmPrice);
+static RentalCarCategory ToContractCategory(CarCategory category) => category switch
+{
+    CarCategory.SmallCar => RentalCarCategory.SmallCar,
+    CarCategory.Combi => RentalCarCategory.Combi,
+    CarCategory.Truck => RentalCarCategory.Truck,
+    _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
+};

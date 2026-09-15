@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Npgsql" Version="10.0.0" />
+    <ProjectReference Include="..\..\src\CarRental.Contracts\CarRental.Contracts.csproj" />
   </ItemGroup>
 </Project>

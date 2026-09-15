@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using CarRental.Contracts;
 
-namespace CustomerB.Postgres;
+namespace CustomerA.JsonConsole;
 
 public sealed class RentalApiClient(string baseUrl)
 {
