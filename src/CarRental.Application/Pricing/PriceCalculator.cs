@@ -4,7 +4,7 @@ namespace CarRental.Application.Pricing;
 
 public sealed class PriceCalculator
 {
-    public decimal Calculate(Rental rental, Pricing pricing)
+    public decimal Calculate(Rental rental, CarRental.Domain.Pricing pricing)
     {
         ArgumentNullException.ThrowIfNull(rental);
         ArgumentNullException.ThrowIfNull(pricing);
