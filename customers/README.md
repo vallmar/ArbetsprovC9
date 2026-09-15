@@ -2,9 +2,11 @@
 
 These projects intentionally represent customers rather than parts of the SaaS core.
 
+Both examples integrate through the public HTTP API and obtain a JWT access token from the showcase `/oauth/token` endpoint before calling rental endpoints.
+
 ## Customer A
 
-`CustomerA.JsonConsole` demonstrates the smallest possible integration: a console UI, a customer-owned JSON document and an HTTP client for the SaaS API.
+`CustomerA.JsonConsole` demonstrates the smallest possible integration: a console UI, customer-owned JSON persistence and an HTTP client for the SaaS API.
 
 ## Customer B
 
