@@ -193,7 +193,7 @@ public sealed class ApiTenantContext : ITenantContext
     public void SetTenant(string tenantId) => TenantId = tenantId;
 }
 
-file sealed record DemoClient(string ClientSecret);
+internal sealed record DemoClient(string ClientSecret);
 
 file sealed class TenantContextMiddleware(RequestDelegate next)
 {
