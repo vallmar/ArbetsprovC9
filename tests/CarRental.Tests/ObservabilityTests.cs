@@ -22,17 +22,10 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
     public async Task Unexpected_exception_returns_sanitized_500_and_is_logged()
     {
         var logSink = new TestLogSink();
-        var client = factory.WithWebHostBuilder(builder =>
-        {
-            builder.ConfigureLogging(logging =>
-            {
-                logging.ClearProviders();
-                logging.AddProvider(new TestLoggerProvider(logSink));
-            });
-        }).CreateClient();
+        var client = CreateLoggingClient(logSink);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/test/unhandled-error");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "tenant-a");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetAccessTokenAsync(client, "tenant-a"));
         var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
@@ -52,6 +45,79 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
             logSink.Entries,
             entry => entry.Exception?.Message == "Intentional test exception.");
     }
+
+    [Fact]
+    public async Task Cross_tenant_access_is_blocked_and_logged_as_warning()
+    {
+        var logSink = new TestLogSink();
+        var client = CreateLoggingClient(logSink);
+        var bookingNumber = $"SECURITY-{Guid.NewGuid():N}";
+        var pickup = new RegisterPickupRequest(
+            bookingNumber,
+            "ABC123",
+            "customer-a",
+            ContractCarCategory.SmallCar,
+            DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
+            10000);
+
+        using (var pickupRequest = new HttpRequestMessage(HttpMethod.Post, "/api/rentals/pickup")
+        {
+            Content = JsonContent.Create(pickup)
+        })
+        {
+            pickupRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetAccessTokenAsync(client, "tenant-a"));
+            var pickupResponse = await client.SendAsync(pickupRequest, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.Created, pickupResponse.StatusCode);
+        }
+
+        var returnRequest = new RegisterReturnRequest(
+            DateTimeOffset.Parse("2026-09-15T18:00:00Z"),
+            10100,
+            500m,
+            2m);
+
+        using var unauthorizedRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/rentals/{bookingNumber}/return")
+        {
+            Content = JsonContent.Create(returnRequest)
+        };
+        unauthorizedRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetAccessTokenAsync(client, "tenant-b"));
+
+        var response = await client.SendAsync(unauthorizedRequest, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains(
+            logSink.Entries,
+            entry => entry.LogLevel == LogLevel.Warning
+                      && entry.Message.Contains("Cross-tenant rental access attempt blocked")
+                      && entry.Message.Contains("Tenant tenant-b")
+                      && entry.Message.Contains($"booking {bookingNumber}")
+                      && entry.Message.Contains("tenant tenant-a"));
+    }
+
+    private HttpClient CreateLoggingClient(TestLogSink logSink)
+        => factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddProvider(new TestLoggerProvider(logSink));
+            });
+        }).CreateClient();
+
+    private static async Task<string> GetAccessTokenAsync(HttpClient client, string tenantId)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "/oauth/token",
+            new { clientId = tenantId, clientSecret = $"secret-{tenantId[^1]}" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var token = await response.Content.ReadFromJsonAsync<TokenResponse>(TestContext.Current.CancellationToken);
+        Assert.NotNull(token);
+        return token!.AccessToken;
+    }
+
+    private sealed record TokenResponse(string AccessToken, string TokenType, int ExpiresIn);
 
     private sealed class TestLogSink
     {
