@@ -12,7 +12,7 @@ var pickup = new CustomerRental(
     "A-1001",
     "ABC123",
     "customer-a-1",
-    RentalCarCategory.SmallCar,
+    ContractCarCategory.SmallCar,
     DateTimeOffset.UtcNow,
     10000);
 

@@ -1,6 +1,6 @@
 namespace CarRental.Contracts;
 
-public enum RentalCarCategory
+public enum ContractCarCategory
 {
     SmallCar,
     Combi,
@@ -11,7 +11,7 @@ public sealed record RegisterPickupRequest(
     string BookingNumber,
     string RegistrationNumber,
     string CustomerIdentifier,
-    RentalCarCategory Category,
+    ContractCarCategory Category,
     DateTimeOffset PickupTime,
     int PickupOdometer);
 
@@ -19,7 +19,7 @@ public sealed record RegisterPickupResponse(
     string BookingNumber,
     string RegistrationNumber,
     string CustomerIdentifier,
-    RentalCarCategory Category,
+    ContractCarCategory Category,
     DateTimeOffset PickupTime,
     int PickupOdometer,
     bool IsReturned);

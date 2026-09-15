@@ -32,6 +32,6 @@ public sealed record CustomerRental(
     string BookingNumber,
     string RegistrationNumber,
     string CustomerId,
-    RentalCarCategory Category,
+    ContractCarCategory Category,
     DateTimeOffset PickupTime,
     int PickupOdometer);

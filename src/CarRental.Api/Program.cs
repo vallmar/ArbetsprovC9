@@ -67,18 +67,18 @@ app.MapPost("/api/rentals/{bookingNumber}/return", async (string bookingNumber, 
 
 app.Run();
 
-static CarCategory ToDomainCategory(RentalCarCategory category) => category switch
+static CarCategory ToDomainCategory(ContractCarCategory category) => category switch
 {
-    RentalCarCategory.SmallCar => CarCategory.SmallCar,
-    RentalCarCategory.Combi => CarCategory.Combi,
-    RentalCarCategory.Truck => CarCategory.Truck,
+    ContractCarCategory.SmallCar => CarCategory.SmallCar,
+    ContractCarCategory.Combi => CarCategory.Combi,
+    ContractCarCategory.Truck => CarCategory.Truck,
     _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
 };
 
-static RentalCarCategory ToContractCategory(CarCategory category) => category switch
+static ContractCarCategory ToContractCategory(CarCategory category) => category switch
 {
-    CarCategory.SmallCar => RentalCarCategory.SmallCar,
-    CarCategory.Combi => RentalCarCategory.Combi,
-    CarCategory.Truck => RentalCarCategory.Truck,
+    CarCategory.SmallCar => ContractCarCategory.SmallCar,
+    CarCategory.Combi => ContractCarCategory.Combi,
+    CarCategory.Truck => ContractCarCategory.Truck,
     _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
 };
