@@ -10,7 +10,8 @@ namespace CarRental.Tests;
 
 public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    private static readonly JsonSerializerOptions CustomerJsonOptions = new()
+    // Match ASP.NET's web JSON defaults used by the real API: camelCase properties + string enums.
+    private static readonly JsonSerializerOptions CustomerJsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() }
     };
@@ -26,18 +27,10 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     public async Task Pickup_returns_201_and_customer_response_contract()
     {
         var bookingNumber = NewBookingNumber();
-        var request = new RegisterPickupRequest(
-            bookingNumber,
-            "ABC123",
-            "customer-a",
-            ContractCarCategory.SmallCar,
-            DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
-            10000);
-
+        var request = new RegisterPickupRequest(bookingNumber, "ABC123", "customer-a", ContractCarCategory.SmallCar, DateTimeOffset.Parse("2026-09-15T10:00:00Z"), 10000);
         var response = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
         var body = await ReadCustomerJsonAsync<RegisterPickupResponse>(response);
         Assert.NotNull(body);
         Assert.Equal(bookingNumber, body!.BookingNumber);
@@ -53,21 +46,12 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     public async Task Pickup_returns_400_with_customer_error_message_when_booking_number_is_duplicate()
     {
         var bookingNumber = NewBookingNumber();
-        var request = new RegisterPickupRequest(
-            bookingNumber,
-            "ABC123",
-            "customer-a",
-            ContractCarCategory.SmallCar,
-            DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
-            10000);
-
+        var request = new RegisterPickupRequest(bookingNumber, "ABC123", "customer-a", ContractCarCategory.SmallCar, DateTimeOffset.Parse("2026-09-15T10:00:00Z"), 10000);
         var firstResponse = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
         Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
 
         var secondResponse = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
-
         Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
-
         var error = await ReadCustomerJsonAsync<ErrorResponse>(secondResponse);
         Assert.NotNull(error);
         Assert.Equal("Booking number is already in use.", error!.Error);
@@ -91,7 +75,6 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         var response = await client.PostAsync("/api/rentals/pickup", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
         var body = await ReadCustomerJsonAsync<RegisterPickupResponse>(response);
         Assert.NotNull(body);
         Assert.Equal(ContractCarCategory.SmallCar, body!.Category);
@@ -102,17 +85,10 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     {
         var bookingNumber = NewBookingNumber();
         await RegisterPickupAsync(bookingNumber, ContractCarCategory.Combi, 10000);
-
-        var request = new RegisterReturnRequest(
-            DateTimeOffset.Parse("2026-09-15T18:00:00Z"),
-            10100,
-            500m,
-            2m);
-
+        var request = new RegisterReturnRequest(DateTimeOffset.Parse("2026-09-15T18:00:00Z"), 10100, 500m, 2m);
         var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
         var body = await ReadCustomerJsonAsync<RegisterReturnResponse>(response);
         Assert.NotNull(body);
         Assert.Equal(bookingNumber, body!.BookingNumber);
@@ -123,16 +99,10 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     public async Task Return_returns_404_with_error_message_when_rental_does_not_exist()
     {
         var bookingNumber = NewBookingNumber();
-        var request = new RegisterReturnRequest(
-            DateTimeOffset.Parse("2026-09-15T18:00:00Z"),
-            10100,
-            500m,
-            2m);
-
+        var request = new RegisterReturnRequest(DateTimeOffset.Parse("2026-09-15T18:00:00Z"), 10100, 500m, 2m);
         var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-
         var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
         Assert.NotNull(error);
         Assert.Equal($"Rental '{bookingNumber}' was not found.", error!.Error);
@@ -143,20 +113,12 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     {
         var bookingNumber = NewBookingNumber();
         await RegisterPickupAsync(bookingNumber, ContractCarCategory.SmallCar, 10000);
-
-        var request = new RegisterReturnRequest(
-            DateTimeOffset.Parse("2026-09-15T18:00:00Z"),
-            10100,
-            500m,
-            2m);
-
+        var request = new RegisterReturnRequest(DateTimeOffset.Parse("2026-09-15T18:00:00Z"), 10100, 500m, 2m);
         var firstResponse = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
 
         var secondResponse = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
-
         Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
-
         var error = await ReadCustomerJsonAsync<ErrorResponse>(secondResponse);
         Assert.NotNull(error);
         Assert.Equal("Rental has already been returned.", error!.Error);
@@ -167,17 +129,10 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     {
         var bookingNumber = NewBookingNumber();
         await RegisterPickupAsync(bookingNumber, ContractCarCategory.SmallCar, 10000);
-
-        var request = new RegisterReturnRequest(
-            DateTimeOffset.Parse("2026-09-15T09:00:00Z"),
-            10100,
-            500m,
-            2m);
-
+        var request = new RegisterReturnRequest(DateTimeOffset.Parse("2026-09-15T09:00:00Z"), 10100, 500m, 2m);
         var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-
         var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
         Assert.NotNull(error);
         Assert.Equal("Return time cannot be before pickup time.", error!.Error);
@@ -188,17 +143,10 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     {
         var bookingNumber = NewBookingNumber();
         await RegisterPickupAsync(bookingNumber, ContractCarCategory.SmallCar, 10000);
-
-        var request = new RegisterReturnRequest(
-            DateTimeOffset.Parse("2026-09-15T18:00:00Z"),
-            9999,
-            500m,
-            2m);
-
+        var request = new RegisterReturnRequest(DateTimeOffset.Parse("2026-09-15T18:00:00Z"), 9999, 500m, 2m);
         var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-
         var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
         Assert.NotNull(error);
         Assert.Equal("Return odometer cannot be lower than pickup odometer.", error!.Error);
@@ -206,14 +154,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
 
     private async Task RegisterPickupAsync(string bookingNumber, ContractCarCategory category, int odometer)
     {
-        var request = new RegisterPickupRequest(
-            bookingNumber,
-            "ABC123",
-            "customer-a",
-            category,
-            DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
-            odometer);
-
+        var request = new RegisterPickupRequest(bookingNumber, "ABC123", "customer-a", category, DateTimeOffset.Parse("2026-09-15T10:00:00Z"), odometer);
         var response = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
