@@ -4,6 +4,7 @@ using CarRental.Application.Rentals;
 using CarRental.Contracts;
 using CarRental.Domain;
 using CarRental.Infrastructure.InMemory;
+using Microsoft.AspNetCore.Diagnostics;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +18,28 @@ builder.Services.AddSingleton<PriceCalculator>();
 builder.Services.AddScoped<RentalService>();
 
 var app = builder.Build();
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exceptionFeature = context.Features.Get<IExceptionHandlerFeature>();
+        var exception = exceptionFeature?.Error;
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+        if (exception is not null)
+        {
+            logger.LogError(
+                exception,
+                "Unhandled exception while processing {HttpMethod} {Path}",
+                context.Request.Method,
+                context.Request.Path);
+        }
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await Results.Json(new ErrorResponse("An unexpected error occurred.")).ExecuteAsync(context);
+    });
+});
 
 app.MapPost("/api/rentals/pickup", async (RegisterPickupRequest request, RentalService service, CancellationToken ct) =>
 {
@@ -73,21 +96,21 @@ app.MapPost("/api/rentals/{bookingNumber}/return", async (string bookingNumber, 
 
 app.Run();
 
-public partial class Program { 
-
-static CarCategory ToDomainCategory(ContractCarCategory category) => category switch
+public partial class Program
 {
-    ContractCarCategory.SmallCar => CarCategory.SmallCar,
-    ContractCarCategory.Combi => CarCategory.Combi,
-    ContractCarCategory.Truck => CarCategory.Truck,
-    _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
-};
+    static CarCategory ToDomainCategory(ContractCarCategory category) => category switch
+    {
+        ContractCarCategory.SmallCar => CarCategory.SmallCar,
+        ContractCarCategory.Combi => CarCategory.Combi,
+        ContractCarCategory.Truck => CarCategory.Truck,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
+    };
 
-static ContractCarCategory ToContractCategory(CarCategory category) => category switch
-{
-    CarCategory.SmallCar => ContractCarCategory.SmallCar,
-    CarCategory.Combi => ContractCarCategory.Combi,
-    CarCategory.Truck => ContractCarCategory.Truck,
-    _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
-};
+    static ContractCarCategory ToContractCategory(CarCategory category) => category switch
+    {
+        CarCategory.SmallCar => ContractCarCategory.SmallCar,
+        CarCategory.Combi => ContractCarCategory.Combi,
+        CarCategory.Truck => ContractCarCategory.Truck,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
+    };
 }
