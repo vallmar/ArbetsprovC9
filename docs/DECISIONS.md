@@ -49,3 +49,11 @@ This file records decisions that explain why the project is structured the way i
 **Why:** A service that cannot explain failures is difficult to operate and debug, even when its business logic is correct.
 
 **Consequence:** The first agent-driven observability task should focus on useful structured logging and clear distinction between expected business/API failures and unexpected application failures. It should avoid unnecessary logging frameworks or telemetry complexity.
+
+## ADR-007: Tenant identity is transport context, not rental data
+
+**Decision:** The simplified multi-tenant demonstration uses `Authorization: Bearer <tenantId>` to establish tenant context. The tenant identifier is not added to the customer JSON request contracts.
+
+**Why:** Tenant identity belongs to the request/authentication boundary, while booking number, customer identifier and vehicle data are business payload. Keeping them separate also makes it straightforward to replace the fake bearer value with a real validated token claim later.
+
+**Consequence:** `ITenantContext` is an application boundary. The API populates it from the HTTP header, while the application service and repository scope rental operations to that tenant. This is deliberately a tenant-isolation demonstration, not real authentication.
