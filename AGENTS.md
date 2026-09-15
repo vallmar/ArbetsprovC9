@@ -149,6 +149,7 @@ The system must not be a black box when something goes wrong.
 - Unexpected application errors should be logged with enough context to diagnose the failure.
 - Logs must not contain secrets or unnecessary sensitive/customer data.
 - Logging should distinguish expected business/API failures from unexpected application failures.
+- Cross-tenant access attempts that are detected by the application should be logged as security-relevant warnings while the external response remains a non-disclosing `404 Not Found`.
 - Do not swallow exceptions silently.
 - When adding important operations or infrastructure, consider what an operator would need to understand what happened.
 - Observability changes should include tests where practical, especially around error handling and API behaviour.
@@ -166,15 +167,17 @@ Use the repository's existing technology choices unless the task explicitly requ
 
 ## 14. Tenant isolation is mandatory
 
-The current project demonstrates multi-tenant isolation with a deliberately fake bearer token.
+The project uses validated JWT bearer tokens to establish tenant context.
 
-- Customer requests use `Authorization: Bearer <tenantId>`.
-- This is a demonstration mechanism, not real authentication or token validation.
-- Tenant identity is transport/authentication context and must not be supplied as a customer-controlled JSON business field.
+- Customer requests authenticate with `Authorization: Bearer <access_token>`.
+- The showcase `/oauth/token` endpoint issues short-lived demo JWTs for two configured showcase clients; this is a local demonstration of token issuance, not a production identity provider.
+- The API validates token signature, issuer, audience, and lifetime before trusting tenant identity.
+- Tenant identity is derived from the validated `client_id` claim and exposed to Application through `ITenantContext`.
+- Tenant identity must not be supplied as a customer-controlled JSON business field.
 - Application operations must obtain tenant identity from `ITenantContext` and persistence lookups must be tenant-scoped.
 - A booking number is unique within a tenant, not globally.
-- Tests must cover cross-tenant isolation for operations that access tenant-owned data.
-- A future real authentication implementation should derive tenant identity from a validated token claim without changing the application/domain concept of tenant ownership.
+- If a requested booking exists for another tenant, the operation must remain non-disclosing to the caller (`404 Not Found`) and should emit a security-relevant warning with useful internal context.
+- Tests must cover authentication failure, cross-tenant isolation, and logging of blocked cross-tenant access.
 
 ## 15. Definition of done for agent changes
 
