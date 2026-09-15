@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -5,14 +6,20 @@ using CarRental.Contracts;
 
 namespace CustomerA.JsonConsole;
 
-public sealed class RentalApiClient(string baseUrl)
+public sealed class RentalApiClient
 {
     private static readonly JsonSerializerOptions CustomerJsonOptions = new()
     {
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private readonly HttpClient client = new() { BaseAddress = new Uri(baseUrl) };
+    private readonly HttpClient client;
+
+    public RentalApiClient(string baseUrl, string tenantId)
+    {
+        client = new HttpClient { BaseAddress = new Uri(baseUrl) };
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantId);
+    }
 
     public async Task<RegisterPickupResponse> RegisterPickupAsync(
         CustomerRental rental,
