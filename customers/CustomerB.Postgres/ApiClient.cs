@@ -1,10 +1,17 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using CarRental.Contracts;
 
 namespace CustomerB.Postgres;
 
 public sealed class RentalApiClient(string baseUrl)
 {
+    private static readonly JsonSerializerOptions CustomerJsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly HttpClient client = new() { BaseAddress = new Uri(baseUrl) };
 
     public async Task<RegisterPickupResponse> RegisterPickupAsync(
@@ -20,11 +27,17 @@ public sealed class RentalApiClient(string baseUrl)
                 rental.Category,
                 rental.PickupTime,
                 rental.PickupOdometer),
+            CustomerJsonOptions,
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<RegisterPickupResponse>(cancellationToken)
-            ?? throw new InvalidOperationException("The SaaS API returned an empty pickup response.");
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(CustomerJsonOptions, cancellationToken);
+            throw new InvalidOperationException(error?.Error ?? "The rental service could not process the request.");
+        }
+
+        return await response.Content.ReadFromJsonAsync<RegisterPickupResponse>(CustomerJsonOptions, cancellationToken)
+            ?? throw new InvalidOperationException("The rental service returned an empty pickup response.");
     }
 }
 
