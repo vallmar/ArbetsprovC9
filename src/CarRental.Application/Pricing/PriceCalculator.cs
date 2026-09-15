@@ -20,7 +20,7 @@ public sealed class PriceCalculator
             CarCategory.SmallCar => pricing.BaseDailyPrice * days,
             CarCategory.Combi => pricing.BaseDailyPrice * days * 1.3m + pricing.BaseKmPrice * kilometers,
             CarCategory.Truck => pricing.BaseDailyPrice * days * 1.5m + pricing.BaseKmPrice * kilometers * 1.5m,
-            _ => throw new ArgumentOutOfRangeException(nameof(rental.Category))
+            _ => throw new InvalidOperationException("The rental has an unsupported car category.")
         };
     }
 }
