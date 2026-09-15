@@ -12,8 +12,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.20" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\CarRental.Application\CarRental.Application.csproj" />
+    <ProjectReference Include="..\..\src\CarRental.Api\CarRental.Api.csproj" />
   </ItemGroup>
 </Project>
