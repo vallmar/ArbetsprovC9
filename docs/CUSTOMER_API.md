@@ -14,13 +14,15 @@ http://localhost:5000
 
 In a deployed environment this will be replaced by the customer's SaaS API URL.
 
-## Response handling
+## Response and error handling
 
-A customer integration must always handle the HTTP status code first and then inspect the JSON response body.
+The most important rule for a customer integration is:
 
-Successful responses use endpoint-specific response contracts.
+> **Check the HTTP status code first. Then inspect the response body.**
 
-Error responses from business logic use this common shape:
+A successful request returns the endpoint-specific response documented below.
+
+Business/application errors use this JSON shape:
 
 ```json
 {
@@ -28,11 +30,38 @@ Error responses from business logic use this common shape:
 }
 ```
 
-The `error` property contains a human-readable explanation of what prevented the requested operation. Customer applications should display or log this message for troubleshooting, but should use the HTTP status code to decide how the request should be handled programmatically.
+The `error` value is intended to be understandable to a human. A customer application can display it directly in a UI and should also log it when troubleshooting.
 
-Do not assume that every `400` response has the same cause. A `400` can mean that the request is invalid according to the API/business rules. The `error` text explains the specific reason.
+Example UI handling:
 
-For malformed JSON or JSON values that cannot be deserialized into the request contract, ASP.NET may reject the request before the endpoint handler runs. Such framework-level validation errors may use a different response shape. Customer integrations should therefore not assume that every error response contains the `error` property.
+```text
+Request failed (400)
+Booking number is already in use.
+```
+
+### Important: do not rely on the error text for program logic
+
+The HTTP status code is the stable signal for deciding how the request failed. The `error` string explains the specific reason.
+
+For example, a customer should treat `400` as a rejected request and use the message to tell the user what needs correcting. The customer should **not** write business logic such as `if error == "Booking number is already in use."`.
+
+The current API does not expose a separate machine-readable error code.
+
+### Errors generated before the endpoint runs
+
+Malformed JSON or JSON values that cannot be converted to the request contract can be rejected by ASP.NET before the endpoint handler is entered. These errors may therefore have a different JSON shape and may not contain the `error` property.
+
+Customer clients must consequently handle both:
+
+```json
+{
+  "error": "..."
+}
+```
+
+and framework-generated error responses.
+
+For an error without an `error` property, keep the HTTP status code and response body available for diagnostics instead of assuming a specific business error.
 
 ## POST /api/rentals/pickup
 
@@ -56,17 +85,20 @@ Content-Type: application/json
 }
 ```
 
-`category` is serialized as a string. Supported values are:
+### Request fields
 
-- `SmallCar`
-- `Combi`
-- `Truck`
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `bookingNumber` | string | Yes | Customer's booking identifier. Must not be empty. Must be unique in the SaaS rental store. |
+| `registrationNumber` | string | Yes | Vehicle registration number. Must not be empty. |
+| `customerIdentifier` | string | Yes | Identifier for the customer making the rental. Must not be empty. |
+| `category` | string | Yes | Vehicle category: `SmallCar`, `Combi`, or `Truck`. |
+| `pickupTime` | ISO-8601 timestamp | Yes | Time at which the vehicle was picked up. |
+| `pickupOdometer` | integer | Yes | Odometer reading at pickup. Must not be negative. |
 
-### Success
+### Success response
 
 HTTP `201 Created`.
-
-Example response:
 
 ```json
 {
@@ -80,7 +112,9 @@ Example response:
 }
 ```
 
-The `Location` header points to:
+The response confirms that the pickup has been registered. `isReturned` is `false` immediately after pickup.
+
+The response also contains a `Location` header pointing to:
 
 ```text
 /api/rentals/{bookingNumber}
@@ -88,11 +122,11 @@ The `Location` header points to:
 
 ### Error responses
 
-#### HTTP 400 Bad Request
+#### `400 Bad Request`
 
-The request reached the application but could not be accepted.
+The request was understood by the API but could not be accepted because it violates an input or business rule.
 
-Example:
+Typical response:
 
 ```json
 {
@@ -100,28 +134,31 @@ Example:
 }
 ```
 
-Possible business/domain messages for pickup include:
+#### Error message reference
 
-| Error message | Meaning | Customer action |
+| Error message | What it means | What the customer should do |
 |---|---|---|
-| `Booking number is already in use.` | A rental with the supplied booking number already exists. | Do not retry with the same booking number. Verify the booking number or retrieve the existing rental through the customer's own booking flow. |
+| `Booking number is already in use.` | A rental with this booking number already exists. | Verify the booking number. Do not retry unchanged. |
 | `Booking number is required.` | `bookingNumber` is empty or whitespace. | Supply a non-empty booking number. |
 | `Registration number is required.` | `registrationNumber` is empty or whitespace. | Supply a non-empty registration number. |
 | `Customer identifier is required.` | `customerIdentifier` is empty or whitespace. | Supply a non-empty customer identifier. |
-| `Unknown car category.` | The category value is not one of the supported categories. | Use `SmallCar`, `Combi`, or `Truck`. |
-
-An invalid negative `pickupOdometer` is also rejected. The current implementation exposes the standard argument exception message for this case, so clients should treat the message as diagnostic text rather than as a stable machine-readable error code.
+| `Unknown car category.` | The category could not be mapped to one of the supported categories. | Use `SmallCar`, `Combi`, or `Truck`. |
+| `...` for a negative pickup odometer | The pickup odometer is invalid because it is below zero. The current implementation exposes the standard .NET argument-exception message rather than a dedicated application message. | Correct `pickupOdometer` and resend the request. |
 
 ### Example customer handling
 
 ```text
-POST pickup
-    |
-    +-- 201 --> Parse RegisterPickupResponse and continue
-    |
-    +-- 400 --> Parse error when present, show/log it, correct the request
-    |
-    +-- other 4xx/5xx --> Handle as HTTP/API failure and inspect the body
+POST /api/rentals/pickup
+        |
+        +-- 201 --> Deserialize RegisterPickupResponse
+        |           Continue normal customer workflow
+        |
+        +-- 400 --> Read error when present
+        |           Show/log the message
+        |           Correct the request
+        |
+        +-- other 4xx/5xx --> Treat as API/framework failure
+                              Keep status + response body for diagnostics
 ```
 
 ## POST /api/rentals/{bookingNumber}/return
@@ -144,11 +181,19 @@ Content-Type: application/json
 }
 ```
 
-### Success
+### Request fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `bookingNumber` | path string | Yes | Booking to return. |
+| `returnTime` | ISO-8601 timestamp | Yes | Time at which the vehicle was returned. Cannot be before pickup time. |
+| `returnOdometer` | integer | Yes | Odometer reading at return. Cannot be below the pickup odometer. |
+| `baseDailyPrice` | decimal | Yes | Base daily rental price. Must not be negative. |
+| `baseKmPrice` | decimal | Yes | Base kilometre price. Must not be negative. |
+
+### Success response
 
 HTTP `200 OK`.
-
-Example response:
 
 ```json
 {
@@ -161,11 +206,9 @@ Example response:
 
 ### Error responses
 
-#### HTTP 404 Not Found
+#### `404 Not Found`
 
-The booking number does not exist in the SaaS rental store.
-
-Example:
+The specified booking does not exist.
 
 ```json
 {
@@ -173,31 +216,24 @@ Example:
 }
 ```
 
-**Meaning:** the customer asked to return a rental that the SaaS does not know about.
+**Meaning:** the SaaS cannot find a rental for that booking number.
 
-**Customer action:** verify the booking number. Do not retry unchanged indefinitely.
+**Customer action:** verify that the booking number is correct and that the pickup was successfully registered.
 
-#### HTTP 400 Bad Request
+#### `400 Bad Request`
 
-The rental exists, but the return request violates a business/domain rule.
+The rental exists, but the return request violates a business or domain rule.
 
-Possible messages include:
-
-| Error message | Meaning | Customer action |
+| Error message | What it means | What the customer should do |
 |---|---|---|
-| `Rental has already been returned.` | The rental is already in the returned state. | Treat the operation as already completed; do not submit another return for the same booking. |
-| `Return time cannot be before pickup time.` | The supplied return timestamp is earlier than the pickup timestamp. | Correct `returnTime`. |
-| `A rental must be returned before a final price can be set.` | A final price cannot be assigned to an active rental. | Normally this indicates an internal sequencing problem; the return must be registered before pricing. |
+| `Rental has already been returned.` | The rental is already in the returned state. | Treat the return as already completed. Do not submit another return. |
+| `Return time cannot be before pickup time.` | `returnTime` is earlier than the original pickup time. | Correct `returnTime`. |
+| `...` for an invalid return odometer | The return odometer is below the pickup odometer or otherwise invalid. The current implementation exposes the standard .NET argument-exception message. | Correct `returnOdometer`. |
+| `...` for invalid pricing | One of the base prices is negative. The pricing value object rejects negative values. | Supply non-negative `baseDailyPrice` and `baseKmPrice`. |
 
-A negative `returnOdometer` or a return odometer below the pickup odometer is rejected. The current implementation exposes standard argument exception text for those cases, so the message should be treated as diagnostic text rather than a stable error code.
+### Error handling example
 
-Invalid or negative pricing values are also rejected because the pricing value object requires non-negative base prices.
-
-## Error message policy
-
-The current API deliberately returns a simple customer-facing message in the `ErrorResponse.Error` property for business/application errors.
-
-Example:
+If the API returns:
 
 ```json
 {
@@ -205,45 +241,73 @@ Example:
 }
 ```
 
-This makes the response easy for a customer's UI or integration layer to display:
+the customer UI can display:
 
 ```text
-Request failed (400)
+Return failed (400)
 Rental has already been returned.
 ```
 
-However, the `error` string is not currently a versioned error code. Customers should therefore use the HTTP status code and request context for programmatic handling and use the text primarily for display, logging, and troubleshooting.
+The application should not interpret the English sentence as an error code. It should interpret the `400` status as a rejected request and use the message to explain why.
 
-## Recommended client implementation
+## How customers should display errors
 
-A customer API client should follow this pattern:
+The API's business errors are intentionally simple so that a customer can surface them directly.
 
-1. Send the HTTP request.
-2. Check the HTTP status code.
-3. On success, deserialize the endpoint's documented response type.
-4. On error, attempt to deserialize `{ "error": "..." }`.
-5. Display/log the `error` text when it is available.
-6. For responses without the `error` property, keep the HTTP status and raw response body available for diagnostics because the API framework may have generated the response before the application endpoint ran.
+Recommended flow:
 
-Conceptually:
+```text
+HTTP response
+    |
+    +-- 2xx --> deserialize documented success response
+    |
+    +-- error --> check status code
+                  |
+                  +-- body contains "error"
+                  |       -> display/log that message
+                  |
+                  +-- no "error"
+                          -> display a generic API error
+                          -> retain status + raw response for diagnostics
+```
 
-```csharp
-if (response.IsSuccessStatusCode)
+A good customer-facing implementation might therefore show:
+
+```text
+Could not register return.
+Rental 'ABC-123' was not found.
+```
+
+while logging the HTTP status and raw response for support/debugging.
+
+## Current error contract and versioning
+
+The current public error contract is:
+
+```json
 {
-    // Deserialize the endpoint-specific success response.
-}
-else
-{
-    // Prefer the API's ErrorResponse.error when present.
-    // Keep status code and raw body for diagnostics.
+  "error": "Human-readable message"
 }
 ```
 
+The `error` text is useful for humans but is **not a stable machine-readable identifier**. This means customers should not build conditional logic around exact message text.
+
+A future version of the API could add a stable code without removing the message, for example:
+
+```json
+{
+  "code": "BOOKING_NUMBER_IN_USE",
+  "error": "Booking number is already in use."
+}
+```
+
+The current implementation does not yet provide such a `code` field.
+
 ## Contract summary
 
-| Endpoint | Success | Business/application error | Typical meaning |
-|---|---:|---:|---|
-| `POST /api/rentals/pickup` | `201 Created` | `400 Bad Request` | Pickup accepted / request violates a rule |
-| `POST /api/rentals/{bookingNumber}/return` | `200 OK` | `400 Bad Request`, `404 Not Found` | Return accepted / request violates a rule / rental not found |
+| Endpoint | Success | Business/application errors |
+|---|---:|---|
+| `POST /api/rentals/pickup` | `201 Created` | `400 Bad Request` |
+| `POST /api/rentals/{bookingNumber}/return` | `200 OK` | `400 Bad Request`, `404 Not Found` |
 
-The public JSON contracts are defined in `src/CarRental.Contracts/RentalContracts.cs`. The API maps these contracts to the internal domain model and does not expose the internal `Rental` type directly.
+The public JSON request and response types are defined in `src/CarRental.Contracts/RentalContracts.cs`. The API maps these public contracts to the internal domain model and does not expose the internal `Rental` type directly.
