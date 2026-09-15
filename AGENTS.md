@@ -164,7 +164,19 @@ Use the repository's existing technology choices unless the task explicitly requ
 - Do not upgrade the SDK/framework or add a major framework dependency as incidental cleanup.
 - Before changing the technology baseline, explain the reason and update the relevant documentation.
 
-## 14. Definition of done for agent changes
+## 14. Tenant isolation is mandatory
+
+The current project demonstrates multi-tenant isolation with a deliberately fake bearer token.
+
+- Customer requests use `Authorization: Bearer <tenantId>`.
+- This is a demonstration mechanism, not real authentication or token validation.
+- Tenant identity is transport/authentication context and must not be supplied as a customer-controlled JSON business field.
+- Application operations must obtain tenant identity from `ITenantContext` and persistence lookups must be tenant-scoped.
+- A booking number is unique within a tenant, not globally.
+- Tests must cover cross-tenant isolation for operations that access tenant-owned data.
+- A future real authentication implementation should derive tenant identity from a validated token claim without changing the application/domain concept of tenant ownership.
+
+## 15. Definition of done for agent changes
 
 Before considering a change complete:
 
