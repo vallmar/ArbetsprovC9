@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CarRental.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
@@ -9,6 +10,11 @@ namespace CarRental.Tests;
 
 public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private static readonly JsonSerializerOptions CustomerJsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly HttpClient client;
 
     public ApiIntegrationTests(WebApplicationFactory<Program> factory)
@@ -28,11 +34,11 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
             10000);
 
-        var response = await client.PostAsJsonAsync("/api/rentals/pickup", request);
+        var response = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<RegisterPickupResponse>();
+        var body = await ReadCustomerJsonAsync<RegisterPickupResponse>(response);
         Assert.NotNull(body);
         Assert.Equal(bookingNumber, body!.BookingNumber);
         Assert.Equal("ABC123", body.RegistrationNumber);
@@ -55,14 +61,14 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
             10000);
 
-        var firstResponse = await client.PostAsJsonAsync("/api/rentals/pickup", request);
+        var firstResponse = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
         Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
 
-        var secondResponse = await client.PostAsJsonAsync("/api/rentals/pickup", request);
+        var secondResponse = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
 
-        var error = await secondResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await ReadCustomerJsonAsync<ErrorResponse>(secondResponse);
         Assert.NotNull(error);
         Assert.Equal("Booking number is already in use.", error!.Error);
     }
@@ -79,14 +85,14 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             category = "SmallCar",
             pickupTime = "2026-09-15T10:00:00Z",
             pickupOdometer = 10000
-        });
+        }, CustomerJsonOptions);
 
         using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         var response = await client.PostAsync("/api/rentals/pickup", content);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<RegisterPickupResponse>();
+        var body = await ReadCustomerJsonAsync<RegisterPickupResponse>(response);
         Assert.NotNull(body);
         Assert.Equal(ContractCarCategory.SmallCar, body!.Category);
     }
@@ -103,11 +109,11 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             500m,
             2m);
 
-        var response = await client.PostAsJsonAsync($"/api/rentals/{bookingNumber}/return", request);
+        var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<RegisterReturnResponse>();
+        var body = await ReadCustomerJsonAsync<RegisterReturnResponse>(response);
         Assert.NotNull(body);
         Assert.Equal(bookingNumber, body!.BookingNumber);
         Assert.Equal(850m, body.FinalPrice);
@@ -123,11 +129,11 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             500m,
             2m);
 
-        var response = await client.PostAsJsonAsync($"/api/rentals/{bookingNumber}/return", request);
+        var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
         Assert.NotNull(error);
         Assert.Equal($"Rental '{bookingNumber}' was not found.", error!.Error);
     }
@@ -144,14 +150,14 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             500m,
             2m);
 
-        var firstResponse = await client.PostAsJsonAsync($"/api/rentals/{bookingNumber}/return", request);
+        var firstResponse = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
 
-        var secondResponse = await client.PostAsJsonAsync($"/api/rentals/{bookingNumber}/return", request);
+        var secondResponse = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
 
-        var error = await secondResponse.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await ReadCustomerJsonAsync<ErrorResponse>(secondResponse);
         Assert.NotNull(error);
         Assert.Equal("Rental has already been returned.", error!.Error);
     }
@@ -168,13 +174,34 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             500m,
             2m);
 
-        var response = await client.PostAsJsonAsync($"/api/rentals/{bookingNumber}/return", request);
+        var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
         Assert.NotNull(error);
         Assert.Equal("Return time cannot be before pickup time.", error!.Error);
+    }
+
+    [Fact]
+    public async Task Return_returns_400_with_customer_message_when_return_odometer_is_lower_than_pickup()
+    {
+        var bookingNumber = NewBookingNumber();
+        await RegisterPickupAsync(bookingNumber, ContractCarCategory.SmallCar, 10000);
+
+        var request = new RegisterReturnRequest(
+            DateTimeOffset.Parse("2026-09-15T18:00:00Z"),
+            9999,
+            500m,
+            2m);
+
+        var response = await PostAsCustomerJsonAsync($"/api/rentals/{bookingNumber}/return", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var error = await ReadCustomerJsonAsync<ErrorResponse>(response);
+        Assert.NotNull(error);
+        Assert.Equal("Return odometer cannot be lower than pickup odometer.", error!.Error);
     }
 
     private async Task RegisterPickupAsync(string bookingNumber, ContractCarCategory category, int odometer)
@@ -187,9 +214,15 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
             odometer);
 
-        var response = await client.PostAsJsonAsync("/api/rentals/pickup", request);
+        var response = await PostAsCustomerJsonAsync("/api/rentals/pickup", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
+
+    private Task<HttpResponseMessage> PostAsCustomerJsonAsync<T>(string uri, T value)
+        => client.PostAsJsonAsync(uri, value, CustomerJsonOptions);
+
+    private static Task<T?> ReadCustomerJsonAsync<T>(HttpResponseMessage response)
+        => response.Content.ReadFromJsonAsync<T>(CustomerJsonOptions);
 
     private static string NewBookingNumber() => $"TEST-{Guid.NewGuid():N}";
 }
