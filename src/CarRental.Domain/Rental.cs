@@ -2,6 +2,7 @@ namespace CarRental.Domain;
 
 public sealed class Rental
 {
+    public string TenantId { get; }
     public string BookingNumber { get; }
     public string RegistrationNumber { get; }
     public string CustomerIdentifier { get; }
@@ -14,20 +15,29 @@ public sealed class Rental
 
     public bool IsReturned => ReturnTime.HasValue;
 
-    public Rental(string bookingNumber, string registrationNumber, string customerIdentifier,
+    public Rental(string tenantId, string bookingNumber, string registrationNumber, string customerIdentifier,
         CarCategory category, DateTimeOffset pickupTime, int pickupOdometer)
     {
+        if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant id is required.");
         if (string.IsNullOrWhiteSpace(bookingNumber)) throw new ArgumentException("Booking number is required.");
         if (string.IsNullOrWhiteSpace(registrationNumber)) throw new ArgumentException("Registration number is required.");
         if (string.IsNullOrWhiteSpace(customerIdentifier)) throw new ArgumentException("Customer identifier is required.");
         if (pickupOdometer < 0) throw new ArgumentOutOfRangeException(nameof(pickupOdometer), "Pickup odometer cannot be negative.");
 
+        TenantId = tenantId;
         BookingNumber = bookingNumber;
         RegistrationNumber = registrationNumber;
         CustomerIdentifier = customerIdentifier;
         Category = category;
         PickupTime = pickupTime;
         PickupOdometer = pickupOdometer;
+    }
+
+    // Keeps direct domain tests simple; application-created rentals always receive the tenant from ITenantContext.
+    public Rental(string bookingNumber, string registrationNumber, string customerIdentifier,
+        CarCategory category, DateTimeOffset pickupTime, int pickupOdometer)
+        : this("test-tenant", bookingNumber, registrationNumber, customerIdentifier, category, pickupTime, pickupOdometer)
+    {
     }
 
     public void Return(DateTimeOffset returnTime, int returnOdometer)
