@@ -62,15 +62,15 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     public async Task Pickup_accepts_documented_json_structure_and_case_insensitive_property_names()
     {
         var bookingNumber = NewBookingNumber();
-        var json = $"""
-        {{
-            "BOOKINGNUMBER": "{bookingNumber}",
+        var json = $$"""
+        {
+            "BOOKINGNUMBER": "{{bookingNumber}}",
             "RegistrationNumber": "ABC123",
             "customerIdentifier": "customer-a",
             "CATEGORY": "smallcar",
             "PickupTime": "2026-09-15T10:00:00Z",
             "pickupOdometer": 10000
-        }}
+        }
         """;
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -115,9 +115,9 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
             "RETURNTIME": "2026-09-15T18:00:00Z",
             "ReturnOdometer": 10100,
             "baseDailyPrice": 500,
-            "BASEKMP RICE": 2
+            "BASEKMPRICE": 2
         }
-        """.Replace("BASEKMP RICE", "BASEKMPRICE");
+        """;
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await client.PostAsync($"/api/rentals/{bookingNumber}/return", content, TestContext.Current.CancellationToken);
