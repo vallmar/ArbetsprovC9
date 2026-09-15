@@ -2,27 +2,59 @@
 
 This document describes the HTTP API exposed by the car-rental SaaS.
 
-The API is the integration boundary for customers. Customer applications should treat the JSON request and response models documented here as the public contract and should not depend on the internal Domain or Application models.
+The API is the integration boundary for customers. Customer applications should treat the HTTP/JSON models documented here as the public contract and should not depend on internal Domain or Application models.
 
-## Tenant identity
+## Authentication and tenant identity
 
-Every customer request must identify the tenant that owns the data. For this project this is deliberately a **fake bearer token**, not real authentication or authorization:
+Every customer request to the rental API must use a valid bearer access token.
+
+For this showcase, the API contains a deliberately small local token endpoint:
 
 ```http
-Authorization: Bearer tenant-a
+POST /oauth/token
+Content-Type: application/json
 ```
 
-The value after `Bearer` is used as the tenant identifier. A production system would replace this with real bearer-token validation and derive the tenant from a trusted token claim rather than trusting a caller-controlled value.
+```json
+{
+  "clientId": "tenant-a",
+  "clientSecret": "secret-a"
+}
+```
 
-The tenant identifier is intentionally sent in the HTTP authorization header rather than in the JSON body. It is transport/authentication context, not part of the rental business payload.
+The response is:
 
-If the header is missing or not in `Bearer <tenantId>` form, the API returns `401 Unauthorized` with `WWW-Authenticate: Bearer`.
+```json
+{
+  "accessToken": "<signed-jwt>",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
+}
+```
 
-Tenant isolation is part of the application behavior:
+The token is then sent on customer API calls:
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+The API validates the JWT signature, issuer, audience and lifetime. The tenant identity is derived from the trusted `client_id` claim. Customers must never put a tenant identifier in the rental JSON payload.
+
+The local `/oauth/token` endpoint exists only to make this repository self-contained. It is a showcase token issuer, not a production identity provider. A real deployment would use an OAuth 2.0/OIDC identity provider and the API would validate tokens issued by that provider.
+
+Invalid or missing bearer tokens result in `401 Unauthorized` with `WWW-Authenticate: Bearer`.
+
+## Tenant isolation
+
+Tenant isolation is part of the application behaviour:
 
 - the same booking number may exist in different tenants;
-- a tenant can only read or modify rentals belonging to that tenant;
-- another tenant attempting to return a rental receives `404 Not Found`, so the existence of the other tenant's rental is not disclosed.
+- rental lookups are always scoped to the authenticated tenant;
+- a tenant cannot return or modify another tenant's rental;
+- an attempt to access another tenant's known booking returns `404 Not Found`, so the API does not disclose that the booking exists for another tenant;
+- the application logs a security-relevant warning when it detects such a cross-tenant access attempt.
+
+The external response deliberately does not reveal the owning tenant.
 
 ## Base URL
 
@@ -32,15 +64,13 @@ The examples use:
 http://localhost:5000
 ```
 
-In a deployed environment this will be replaced by the customer's SaaS API URL.
+In a deployed environment this is replaced by the customer's SaaS API URL.
 
 ## Response and error handling
 
 The most important rule for a customer integration is:
 
 > **Check the HTTP status code first. Then inspect the response body.**
-
-A successful request returns the endpoint-specific response documented below.
 
 Business/application errors use this JSON shape:
 
@@ -50,38 +80,45 @@ Business/application errors use this JSON shape:
 }
 ```
 
-The `error` value is intended to be understandable to a human. A customer application can display it directly in a UI and should also log it when troubleshooting.
+The `error` value is intended to be understandable to a human. Customers should not use the English error message as a machine-readable error code.
 
-Example UI handling:
+Malformed JSON or framework-level failures may have a different response shape. Customers should therefore handle the HTTP status code first and retain the response body for diagnostics.
 
-```text
-Request failed (400)
-Booking number is already in use.
-```
+## POST /oauth/token
 
-### Important: do not rely on the error text for program logic
+Demo token endpoint used by the repository's customer examples.
 
-The HTTP status code is the stable signal for deciding how the request failed. The `error` string explains the specific reason.
-
-For example, a customer should treat `400` as a rejected request and use the message to tell the user what needs correcting. The customer should **not** write business logic such as `if error == "Booking number is already in use."`.
-
-The current API does not expose a separate machine-readable error code.
-
-### Errors generated before the endpoint runs
-
-Malformed JSON or JSON values that cannot be converted to the request contract can be rejected by ASP.NET before the endpoint handler is entered. These errors may therefore have a different JSON shape and may not contain the `error` property.
-
-Customer clients must consequently handle both:
+### Request
 
 ```json
 {
-  "error": "..."
+  "clientId": "tenant-a",
+  "clientSecret": "secret-a"
 }
 ```
 
-and framework-generated error responses.
+Two showcase clients are configured:
 
-For an error without an `error` property, keep the HTTP status code and response body available for diagnostics instead of assuming a specific business error.
+| Client ID | Demo secret | Tenant |
+|---|---|---|
+| `tenant-a` | `secret-a` | tenant-a |
+| `tenant-b` | `secret-b` | tenant-b |
+
+### Success
+
+HTTP `200 OK`.
+
+```json
+{
+  "accessToken": "<signed-jwt>",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
+}
+```
+
+### Failure
+
+HTTP `401 Unauthorized` when the client credentials are not accepted.
 
 ## POST /api/rentals/pickup
 
@@ -91,7 +128,7 @@ Registers a vehicle pickup.
 
 ```http
 POST /api/rentals/pickup
-Authorization: Bearer tenant-a
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 ```
 
@@ -110,14 +147,14 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `bookingNumber` | string | Yes | Customer's booking identifier. Must not be empty. Unique within the tenant. |
-| `registrationNumber` | string | Yes | Vehicle registration number. Must not be empty. |
-| `customerIdentifier` | string | Yes | Identifier for the customer making the rental. Must not be empty. |
-| `category` | string | Yes | Vehicle category: `SmallCar`, `Combi`, or `Truck`. |
+| `bookingNumber` | string | Yes | Customer's booking identifier. Unique within the authenticated tenant. |
+| `registrationNumber` | string | Yes | Vehicle registration number. |
+| `customerIdentifier` | string | Yes | Identifier for the customer making the rental. |
+| `category` | string | Yes | `SmallCar`, `Combi`, or `Truck`. |
 | `pickupTime` | ISO-8601 timestamp | Yes | Time at which the vehicle was picked up. |
 | `pickupOdometer` | integer | Yes | Odometer reading at pickup. Must not be negative. |
 
-### Success response
+### Success
 
 HTTP `201 Created`.
 
@@ -133,66 +170,19 @@ HTTP `201 Created`.
 }
 ```
 
-The response confirms that the pickup has been registered. `isReturned` is `false` immediately after pickup.
+The response also contains a `Location` header pointing to `/api/rentals/{bookingNumber}`.
 
-The response also contains a `Location` header pointing to:
+### Errors
 
-```text
-/api/rentals/{bookingNumber}
-```
+- `401 Unauthorized` — missing or invalid access token.
+- `400 Bad Request` — request or business rule rejected.
 
-### Error responses
-
-#### `401 Unauthorized`
-
-The tenant identity is missing or malformed.
-
-```json
-{
-  "error": "Tenant identity is required."
-}
-```
-
-#### `400 Bad Request`
-
-The request was understood by the API but could not be accepted because it violates an input or business rule.
-
-Typical response:
+Typical business error:
 
 ```json
 {
   "error": "Booking number is already in use."
 }
-```
-
-#### Error message reference
-
-| Error message | What it means | What the customer should do |
-|---|---|---|
-| `Booking number is already in use.` | A rental with this booking number already exists for the current tenant. | Verify the booking number. Do not retry unchanged. |
-| `Booking number is required.` | `bookingNumber` is empty or whitespace. | Supply a non-empty booking number. |
-| `Registration number is required.` | `registrationNumber` is empty or whitespace. | Supply a non-empty registration number. |
-| `Customer identifier is required.` | `customerIdentifier` is empty or whitespace. | Supply a non-empty customer identifier. |
-| `Unknown car category.` | The category could not be mapped to one of the supported categories. | Use `SmallCar`, `Combi`, or `Truck`. |
-| `...` for a negative pickup odometer | The pickup odometer is invalid because it is below zero. The current implementation exposes the standard .NET argument-exception message rather than a dedicated application message. | Correct `pickupOdometer` and resend the request. |
-
-### Example customer handling
-
-```text
-POST /api/rentals/pickup
-        |
-        +-- 201 --> Deserialize RegisterPickupResponse
-        |           Continue normal customer workflow
-        |
-        +-- 400 --> Read error when present
-        |           Show/log the message
-        |           Correct the request
-        |
-        +-- 401 --> Tenant identity missing/invalid
-        |           Configure the customer API client with its tenant identity
-        |
-        +-- other 4xx/5xx --> Treat as API/framework failure
-                              Keep status + response body for diagnostics
 ```
 
 ## POST /api/rentals/{bookingNumber}/return
@@ -203,7 +193,7 @@ Registers the return of a rental and calculates the final price.
 
 ```http
 POST /api/rentals/TEST-001/return
-Authorization: Bearer tenant-a
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 ```
 
@@ -220,13 +210,13 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `bookingNumber` | path string | Yes | Booking to return within the current tenant. |
-| `returnTime` | ISO-8601 timestamp | Yes | Time at which the vehicle was returned. Cannot be before pickup time. |
-| `returnOdometer` | integer | Yes | Odometer reading at return. Cannot be below the pickup odometer. |
+| `bookingNumber` | path string | Yes | Booking to return within the authenticated tenant. |
+| `returnTime` | ISO-8601 timestamp | Yes | Return time. Cannot be before pickup time. |
+| `returnOdometer` | integer | Yes | Return odometer. Cannot be below pickup odometer. |
 | `baseDailyPrice` | decimal | Yes | Base daily rental price. Must not be negative. |
 | `baseKmPrice` | decimal | Yes | Base kilometre price. Must not be negative. |
 
-### Success response
+### Success
 
 HTTP `200 OK`.
 
@@ -237,17 +227,13 @@ HTTP `200 OK`.
 }
 ```
 
-`finalPrice` is the calculated final rental price.
+### Errors
 
-### Error responses
+- `401 Unauthorized` — missing or invalid access token.
+- `404 Not Found` — booking does not exist for the authenticated tenant, including when another tenant owns it.
+- `400 Bad Request` — rental exists but the return violates a business rule.
 
-#### `401 Unauthorized`
-
-The tenant identity is missing or malformed.
-
-#### `404 Not Found`
-
-The specified booking does not exist **for the current tenant**.
+Example `404`:
 
 ```json
 {
@@ -255,102 +241,54 @@ The specified booking does not exist **for the current tenant**.
 }
 ```
 
-This is also the response when another tenant owns the booking. The API does not reveal whether the booking exists under another tenant.
+The `404` response is intentionally identical whether the booking does not exist or belongs to another tenant.
 
-**Customer action:** verify that the booking number is correct and that the pickup was successfully registered for the current tenant.
+Typical `400` messages include:
 
-#### `400 Bad Request`
+- `Rental has already been returned.`
+- `Return time cannot be before pickup time.`
+- an argument error for an invalid odometer value;
+- an argument error for invalid pricing.
 
-The rental exists, but the return request violates a business or domain rule.
-
-| Error message | What it means | What the customer should do |
-|---|---|---|
-| `Rental has already been returned.` | The rental is already in the returned state. | Treat the return as already completed. Do not submit another return. |
-| `Return time cannot be before pickup time.` | `returnTime` is earlier than the original pickup time. | Correct `returnTime`. |
-| `...` for an invalid return odometer | The return odometer is below the pickup odometer or otherwise invalid. The current implementation exposes the standard .NET argument-exception message. | Correct `returnOdometer`. |
-| `...` for invalid pricing | One of the base prices is negative. The pricing value object rejects negative values. | Supply non-negative `baseDailyPrice` and `baseKmPrice`. |
-
-### Error handling example
-
-If the API returns:
-
-```json
-{
-  "error": "Rental has already been returned."
-}
-```
-
-the customer UI can display:
+## Customer integration flow
 
 ```text
-Return failed (400)
-Rental has already been returned.
+Customer application
+       |
+       | POST /oauth/token
+       | client credentials
+       v
+   access token
+       |
+       | Authorization: Bearer <JWT>
+       v
+    Rental API
+       |
+       +--> validate JWT
+       |
+       +--> client_id -> tenant context
+       |
+       +--> tenant-scoped rental operation
+       |
+       +--> 2xx / 4xx response
 ```
 
-The application should not interpret the English sentence as an error code. It should interpret the `400` status as a rejected request and use the message to explain why.
+The customer application owns its own persistence and UI. It only depends on the HTTP API and its documented JSON contracts.
 
-## How customers should display errors
+## Security and logging
 
-The API's business errors are intentionally simple so that a customer can surface them directly.
+The API never logs bearer access tokens or client secrets.
 
-Recommended flow:
+When the API detects that an authenticated tenant requested a booking owned by another tenant, it emits a structured Warning for operators. The caller still receives `404 Not Found` so the existence or ownership of the booking is not disclosed.
 
-```text
-HTTP response
-    |
-    +-- 2xx --> deserialize documented success response
-    |
-    +-- 401 --> tenant identity problem
-    |
-    +-- error --> check status code
-                  |
-                  +-- body contains "error"
-                  |       -> display/log that message
-                  |
-                  +-- no "error"
-                          -> display a generic API error
-                          -> retain status + raw response for diagnostics
-```
-
-A good customer-facing implementation might therefore show:
-
-```text
-Could not register return.
-Rental 'ABC-123' was not found.
-```
-
-while logging the HTTP status and raw response for support/debugging.
-
-## Current error contract and versioning
-
-The current public error contract is:
-
-```json
-{
-  "error": "Human-readable message"
-}
-```
-
-The `error` text is useful for humans but is **not a stable machine-readable identifier**. This means customers should not build conditional logic around exact message text.
-
-A future version of the API could add a stable code without removing the message, for example:
-
-```json
-{
-  "code": "BOOKING_NUMBER_IN_USE",
-  "error": "Booking number is already in use."
-}
-```
-
-The current implementation does not yet provide such a `code` field.
+The security log contains internal diagnostic context such as the requesting tenant, booking number, and owning tenant. This context is for service operators and is not part of the customer response.
 
 ## Contract summary
 
-| Endpoint | Success | Business/application errors |
+| Endpoint | Success | Errors |
 |---|---:|---|
+| `POST /oauth/token` | `200 OK` | `401 Unauthorized` |
 | `POST /api/rentals/pickup` | `201 Created` | `400 Bad Request`, `401 Unauthorized` |
 | `POST /api/rentals/{bookingNumber}/return` | `200 OK` | `400 Bad Request`, `401 Unauthorized`, `404 Not Found` |
 
-The public JSON request and response types are defined in `src/CarRental.Contracts/RentalContracts.cs`. The API maps these public contracts to the internal domain model and does not expose the internal `Rental` type directly.
-
-The tenant identity is deliberately not part of those JSON contracts. It is request authentication context and is represented by the `Authorization: Bearer <tenantId>` header in this simplified demonstration.
+The public rental request/response types are defined in `src/CarRental.Contracts/RentalContracts.cs`. Tenant identity and JWT details are authentication concerns and are not part of those JSON rental DTOs.
