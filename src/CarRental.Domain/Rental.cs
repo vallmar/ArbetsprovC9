@@ -35,7 +35,7 @@ public sealed class Rental
         if (IsReturned) throw new InvalidOperationException("Rental has already been returned.");
         if (returnTime < PickupTime) throw new ArgumentException("Return time cannot be before pickup time.");
         if (returnOdometer < PickupOdometer)
-            throw new ArgumentOutOfRangeException(nameof(returnOdometer), "Return odometer cannot be lower than pickup odometer.");
+            throw new ArgumentException("Return odometer cannot be lower than pickup odometer.");
 
         ReturnTime = returnTime;
         ReturnOdometer = returnOdometer;
