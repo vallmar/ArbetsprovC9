@@ -3,7 +3,7 @@ using CustomerA.JsonConsole;
 using CarRental.Contracts;
 
 var store = new CustomerAJsonStore("customer-a-data.json");
-var api = new RentalApiClient("http://localhost:5000", "tenant-a");
+var api = new RentalApiClient("http://localhost:5000", "tenant-a", "secret-a");
 
 Console.WriteLine("Customer A - JSON storage + Console UI");
 Console.WriteLine("The customer owns its storage model and integrates with the SaaS through public API contracts.");
