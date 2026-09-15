@@ -1,25 +1,27 @@
 using System.Text.Json;
+using CustomerA.JsonConsole;
+using CarRental.Contracts;
 
 var store = new CustomerAJsonStore("customer-a-data.json");
 var api = new RentalApiClient("http://localhost:5000");
 
 Console.WriteLine("Customer A - JSON storage + Console UI");
-Console.WriteLine("This application owns its storage model and only knows the SaaS HTTP API contract.");
+Console.WriteLine("The customer owns its storage model and integrates with the SaaS through public API contracts.");
 
-var booking = "A-1001";
-var pickup = new CustomerRental("A-1001", "ABC123", "customer-a-1", "SmallCar",
-    DateTimeOffset.UtcNow, 10000);
+var pickup = new CustomerRental(
+    "A-1001",
+    "ABC123",
+    "customer-a-1",
+    RentalCarCategory.SmallCar,
+    DateTimeOffset.UtcNow,
+    10000);
 
 await store.SaveAsync(pickup);
 Console.WriteLine($"Saved {pickup.BookingNumber} in customer-owned JSON storage.");
 
-// Optional live integration against the SaaS API:
-// await api.RegisterPickupAsync(pickup);
-
-return;
-
-sealed record CustomerRental(string BookingNumber, string RegistrationNumber, string CustomerId,
-    string Category, DateTimeOffset PickupTime, int PickupOdometer);
+// Live integration against the SaaS API:
+// var response = await api.RegisterPickupAsync(pickup);
+// Console.WriteLine($"SaaS accepted pickup {response.BookingNumber}.");
 
 sealed class CustomerAJsonStore(string path)
 {
@@ -27,24 +29,5 @@ sealed class CustomerAJsonStore(string path)
     {
         var json = JsonSerializer.Serialize(rental, new JsonSerializerOptions { WriteIndented = true });
         await File.WriteAllTextAsync(path, json);
-    }
-}
-
-sealed class RentalApiClient(string baseUrl)
-{
-    private readonly HttpClient client = new() { BaseAddress = new Uri(baseUrl) };
-
-    public async Task RegisterPickupAsync(CustomerRental rental)
-    {
-        var response = await client.PostAsJsonAsync("/api/rentals/pickup", new
-        {
-            rental.BookingNumber,
-            rental.RegistrationNumber,
-            CustomerIdentifier = rental.CustomerId,
-            Category = rental.Category,
-            rental.PickupTime,
-            rental.PickupOdometer
-        });
-        response.EnsureSuccessStatusCode();
     }
 }
