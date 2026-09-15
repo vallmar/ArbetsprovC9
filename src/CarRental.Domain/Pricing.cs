@@ -2,9 +2,15 @@ namespace CarRental.Domain;
 
 public sealed record Pricing(decimal BaseDailyPrice, decimal BaseKmPrice)
 {
-    public Pricing
+    public Pricing(decimal baseDailyPrice, decimal baseKmPrice)
+        : this()
     {
-        if (BaseDailyPrice < 0) throw new ArgumentOutOfRangeException(nameof(BaseDailyPrice));
-        if (BaseKmPrice < 0) throw new ArgumentOutOfRangeException(nameof(BaseKmPrice));
+        if (baseDailyPrice < 0)
+            throw new ArgumentOutOfRangeException(nameof(baseDailyPrice));
+        if (baseKmPrice < 0)
+            throw new ArgumentOutOfRangeException(nameof(baseKmPrice));
+
+        BaseDailyPrice = baseDailyPrice;
+        BaseKmPrice = baseKmPrice;
     }
 }
