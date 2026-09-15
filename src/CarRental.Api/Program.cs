@@ -1,18 +1,49 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json.Serialization;
 using CarRental.Application.Ports;
 using CarRental.Application.Pricing;
 using CarRental.Application.Rentals;
 using CarRental.Contracts;
 using CarRental.Domain;
 using CarRental.Infrastructure.InMemory;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
-using System.Text.Json.Serialization;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is not configured.");
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience is not configured.");
+var jwtSigningKey = builder.Configuration["Jwt:SigningKey"] ?? throw new InvalidOperationException("Jwt:SigningKey is not configured.");
+
+if (Encoding.UTF8.GetByteCount(jwtSigningKey) < 32)
+    throw new InvalidOperationException("Jwt:SigningKey must be at least 32 bytes.");
+
+var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey));
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = securityKey,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
+builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IRentalRepository, InMemoryRentalRepository>();
 builder.Services.AddSingleton<PriceCalculator>();
 builder.Services.AddScoped<ApiTenantContext>();
@@ -43,7 +74,31 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
+app.UseAuthentication();
 app.UseMiddleware<TenantContextMiddleware>();
+app.UseAuthorization();
+
+app.MapPost("/oauth/token", (TokenRequest request) =>
+{
+    if (!DemoClients.TryGetValue(request.ClientId, out var client) || client.ClientSecret != request.ClientSecret)
+        return Results.Unauthorized();
+
+    var now = DateTime.UtcNow;
+    var token = new JwtSecurityToken(
+        issuer: jwtIssuer,
+        audience: jwtAudience,
+        claims:
+        [
+            new Claim(JwtRegisteredClaimNames.Sub, request.ClientId),
+            new Claim("client_id", request.ClientId),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
+        ],
+        notBefore: now,
+        expires: now.AddHours(1),
+        signingCredentials: new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256));
+
+    return Results.Ok(new TokenResponse(new JwtSecurityTokenHandler().WriteToken(token), "Bearer", 3600));
+}).AllowAnonymous();
 
 app.MapPost("/api/rentals/pickup", async (RegisterPickupRequest request, RentalService service, CancellationToken ct) =>
 {
@@ -73,7 +128,7 @@ app.MapPost("/api/rentals/pickup", async (RegisterPickupRequest request, RentalS
     {
         return Results.BadRequest(new ErrorResponse(ex.Message));
     }
-});
+}).RequireAuthorization();
 
 app.MapPost("/api/rentals/{bookingNumber}/return", async (string bookingNumber, RegisterReturnRequest request, RentalService service, CancellationToken ct) =>
 {
@@ -96,10 +151,11 @@ app.MapPost("/api/rentals/{bookingNumber}/return", async (string bookingNumber, 
     {
         return Results.BadRequest(new ErrorResponse(ex.Message));
     }
-});
+}).RequireAuthorization();
 
 #if DEBUG
-app.MapGet("/api/test/unhandled-error", (HttpContext context) => throw new InvalidOperationException("Intentional test exception."));
+app.MapGet("/api/test/unhandled-error", (HttpContext context) => throw new InvalidOperationException("Intentional test exception."))
+    .RequireAuthorization();
 #endif
 
 app.Run();
@@ -121,6 +177,12 @@ public partial class Program
         CarCategory.Truck => ContractCarCategory.Truck,
         _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unknown car category.")
     };
+
+    private static readonly IReadOnlyDictionary<string, DemoClient> DemoClients = new Dictionary<string, DemoClient>(StringComparer.Ordinal)
+    {
+        ["tenant-a"] = new DemoClient("secret-a"),
+        ["tenant-b"] = new DemoClient("secret-b")
+    };
 }
 
 public sealed class ApiTenantContext : ITenantContext
@@ -130,19 +192,27 @@ public sealed class ApiTenantContext : ITenantContext
     public void SetTenant(string tenantId) => TenantId = tenantId;
 }
 
+file sealed record DemoClient(string ClientSecret);
+file sealed record TokenRequest(string ClientId, string ClientSecret);
+file sealed record TokenResponse(string AccessToken, string TokenType, int ExpiresIn);
+
 file sealed class TenantContextMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext context, ApiTenantContext tenantContext)
     {
-        if (!context.Request.Headers.TryGetValue("Authorization", out var authorization)
-            || authorization.Count != 1
-            || !authorization[0].StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        if (context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null)
+        {
+            await next(context);
+            return;
+        }
+
+        if (!context.User.Identity?.IsAuthenticated ?? true)
         {
             await UnauthorizedAsync(context);
             return;
         }
 
-        var tenantId = authorization[0]["Bearer ".Length..].Trim();
+        var tenantId = context.User.FindFirst("client_id")?.Value;
         if (string.IsNullOrWhiteSpace(tenantId))
         {
             await UnauthorizedAsync(context);
@@ -157,6 +227,6 @@ file sealed class TenantContextMiddleware(RequestDelegate next)
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.Headers.WWWAuthenticate = "Bearer";
-        await Results.Json(new ErrorResponse("Tenant identity is required.")).ExecuteAsync(context);
+        await Results.Json(new ErrorResponse("A valid tenant access token is required.")).ExecuteAsync(context);
     }
 }
