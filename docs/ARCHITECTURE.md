@@ -46,9 +46,10 @@ Coordinates application use cases and defines ports where the application needs 
 
 - Depends on `CarRental.Domain`.
 - Does not depend on ASP.NET Core or a specific persistence technology.
-- `IRentalRepository` is an example of an application persistence boundary.
-- `ITenantContext` is the application boundary for the tenant identity established by the transport/authentication layer.
+- `IRentalRepository` is an application persistence boundary.
+- `ITenantContext` is the application boundary for tenant identity established by the authentication/transport layer.
 - Rental lookups are always scoped through the current tenant context.
+- A narrowly scoped ownership lookup exists for auditing a failed cross-tenant access attempt.
 
 ### `CarRental.Infrastructure`
 
@@ -64,12 +65,13 @@ Contains implementations of infrastructure concerns such as persistence.
 The HTTP entry point and composition boundary for the SaaS.
 
 - Depends on `CarRental.Application`, `CarRental.Infrastructure`, and `CarRental.Contracts`.
+- Validates JWT bearer access tokens.
+- Derives tenant identity from the trusted `client_id` claim and populates `ITenantContext`.
 - Translates HTTP requests into application operations.
-- Establishes tenant context from the simplified `Authorization: Bearer <tenantId>` header.
 - Translates application/domain results into customer-facing HTTP responses.
 - Must not expose internal domain objects as the public API contract.
 
-The bearer value is deliberately fake. It demonstrates the shape of a tenant-aware system without pretending to implement real authentication. A production implementation would validate the token and derive the tenant from a trusted claim.
+The repository contains a deliberately small `/oauth/token` showcase endpoint so the project can demonstrate the complete token flow without an external identity provider. It is explicitly development/demo infrastructure, not production authentication.
 
 ### `CarRental.Contracts`
 
@@ -79,11 +81,11 @@ This project represents a customer-visible contract. Changes require correspondi
 
 Contracts are deliberately separate from the Domain so internal domain changes do not automatically become API changes.
 
-Tenant identity is intentionally not part of these JSON DTOs; it is request authentication context.
+Tenant identity is intentionally not part of these JSON DTOs; it is authentication context.
 
 ### `CarRental.Tests`
 
-Tests the system, including domain behaviour, application behaviour, API contracts, and architectural boundaries.
+Tests the system, including domain behaviour, application behaviour, API contracts, authentication, security isolation, and observability.
 
 Architecture rules that can be checked automatically should be enforced here rather than only described in prose.
 
@@ -94,7 +96,7 @@ Customer projects live under `customers/` and are deliberately not part of the S
 They must:
 
 - communicate with the SaaS through HTTP,
-- send their tenant identity as request context,
+- obtain an access token and send it as request authentication,
 - own their own persistence and customer-specific models,
 - map their own models to/from the public HTTP contract, and
 - remain independent of the SaaS implementation.
@@ -139,52 +141,61 @@ The architecture should not grow generic repositories, mediator layers, factorie
 
 The public API has three separate concerns:
 
-1. HTTP transport and serialization in `CarRental.Api`.
+1. HTTP transport, authentication and serialization in `CarRental.Api`.
 2. Public DTOs/enums in `CarRental.Contracts`.
 3. Customer-facing API documentation in `docs/CUSTOMER_API.md`.
 
-Tenant identity is a fourth transport concern: it is carried by the `Authorization` header but is not included in the JSON business payload.
+Tenant identity is a transport/authentication concern: it is carried by a validated bearer token but is not included in the JSON business payload.
 
-These must remain aligned. A public JSON change is not complete until the contract, implementation, tests, and documentation agree.
+These must remain aligned. A public JSON or HTTP change is not complete until the contract, implementation, tests, and documentation agree.
 
-## Tenant isolation
+## Authentication and tenant isolation
 
-Tenant isolation is intentionally implemented at more than one layer:
+The intended request flow is:
 
 ```text
-Authorization header
-       │
-       ▼
+Authorization: Bearer <JWT>
+          │
+          ▼
+ASP.NET JWT bearer validation
+          │
+          ▼
+ClaimsPrincipal.client_id
+          │
+          ▼
 TenantContextMiddleware
-       │
-       ▼
+          │
+          ▼
 ITenantContext
-       │
-       ▼
+          │
+          ▼
 RentalService
-       │
-       ▼
+          │
+          ▼
 IRentalRepository(tenantId, bookingNumber)
-       │
-       ▼
+          │
+          ▼
 Tenant-scoped persistence
 ```
 
-This is important because simply accepting a tenant identifier at the API boundary is not enough. The tenant must influence the application operation and the persistence lookup. Otherwise a caller could provide another tenant's booking number and access its data.
+The API validates the token's signature, issuer, audience and lifetime before trusting the `client_id` claim. The application does not know that JWT exists; it only knows the tenant context.
 
-The test suite explicitly demonstrates that one tenant cannot return another tenant's rental and that the same booking number may exist independently in two tenants.
+Tenant isolation is implemented at the persistence boundary. The same booking number may exist independently for multiple tenants. A tenant-scoped lookup therefore cannot accidentally return another tenant's rental.
+
+If the requested booking is missing for the current tenant, the application performs a narrow ownership check. If another tenant owns the booking, it logs a security-relevant warning and still returns `404 Not Found` to the caller. This avoids disclosing the other tenant's data while giving operators evidence of a possible cross-tenant access attempt.
 
 ## Observability
 
 Observability is part of the operational architecture, not an afterthought.
 
-The baseline should answer at least:
+The baseline answers:
 
 - What request/operation was being handled?
 - Did it succeed or fail?
 - Was the failure an expected business/API failure or an unexpected application failure?
 - If unexpected, is there enough context in the logs to diagnose it?
+- Did an authenticated tenant attempt to access data owned by another tenant?
 
-Logging must not expose secrets or unnecessary sensitive/customer data.
+The service uses the built-in `ILogger` abstraction. Unexpected exceptions are logged at Error level. Blocked cross-tenant access is logged at Warning level with tenant and booking context. Secrets and bearer tokens are never logged.
 
-The initial implementation should stay simple. More advanced telemetry should be introduced only when there is a concrete need.
+More advanced telemetry should be introduced only when there is a concrete operational need.
