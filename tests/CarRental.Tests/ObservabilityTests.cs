@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using CarRental.Contracts;
 using Microsoft.AspNetCore.Hosting;
@@ -30,7 +31,9 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
             });
         }).CreateClient();
 
-        var response = await client.GetAsync("/api/test/unhandled-error", TestContext.Current.CancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/test/unhandled-error");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "tenant-a");
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
