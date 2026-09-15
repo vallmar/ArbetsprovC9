@@ -4,7 +4,7 @@ using CarRental.Domain;
 
 namespace CarRental.Application.Rentals;
 
-public sealed class RentalService(IRentalRepository repository, PriceCalculator priceCalculator)
+public sealed class RentalService(IRentalRepository repository, PriceCalculator priceCalculator, ITenantContext tenantContext)
 {
     public async Task<Rental> RegisterPickupAsync(
         string bookingNumber,
@@ -15,10 +15,10 @@ public sealed class RentalService(IRentalRepository repository, PriceCalculator 
         int pickupOdometer,
         CancellationToken cancellationToken = default)
     {
-        if (await repository.GetByBookingNumberAsync(bookingNumber, cancellationToken) is not null)
+        if (await repository.GetByBookingNumberAsync(tenantContext.TenantId, bookingNumber, cancellationToken) is not null)
             throw new InvalidOperationException("Booking number is already in use.");
 
-        var rental = new Rental(bookingNumber, registrationNumber, customerIdentifier, category, pickupTime, pickupOdometer);
+        var rental = new Rental(tenantContext.TenantId, bookingNumber, registrationNumber, customerIdentifier, category, pickupTime, pickupOdometer);
         await repository.AddAsync(rental, cancellationToken);
         return rental;
     }
@@ -30,7 +30,7 @@ public sealed class RentalService(IRentalRepository repository, PriceCalculator 
         CarRental.Domain.Pricing pricing,
         CancellationToken cancellationToken = default)
     {
-        var rental = await repository.GetByBookingNumberAsync(bookingNumber, cancellationToken)
+        var rental = await repository.GetByBookingNumberAsync(tenantContext.TenantId, bookingNumber, cancellationToken)
             ?? throw new KeyNotFoundException($"Rental '{bookingNumber}' was not found.");
 
         rental.Return(returnTime, returnOdometer);
