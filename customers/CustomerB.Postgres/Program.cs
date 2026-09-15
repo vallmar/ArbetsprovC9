@@ -1,3 +1,4 @@
+using CustomerB.Postgres;
 using Npgsql;
 
 var connectionString = Environment.GetEnvironmentVariable("CUSTOMER_B_POSTGRES")
@@ -26,6 +27,8 @@ await using (var command = new NpgsqlCommand(createTable, connection))
 Console.WriteLine("Customer B - PostgreSQL storage");
 Console.WriteLine("This application owns its relational persistence model and can call the SaaS API independently.");
 
+var api = new RentalApiClient("http://localhost:5000", "tenant-b", "secret-b");
+
 const string insert = """
 INSERT INTO rentals (booking_number, registration_number, customer_id, category, pickup_time, pickup_odometer)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -41,5 +44,6 @@ insertCommand.Parameters.AddWithValue(DateTimeOffset.UtcNow);
 insertCommand.Parameters.AddWithValue(25000);
 await insertCommand.ExecuteNonQueryAsync();
 
-// The production-style integration would be over HTTP, e.g. using HttpClient
-// against the SaaS API. No CarRental.Domain reference is required here.
+// Live integration against the SaaS API would obtain a JWT through /oauth/token
+// and send it as Authorization: Bearer <access_token>.
+// var response = await api.RegisterPickupAsync(...);
