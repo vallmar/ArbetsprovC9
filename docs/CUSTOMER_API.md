@@ -56,16 +56,6 @@ Tenant isolation is part of the application behaviour:
 
 The external response deliberately does not reveal the owning tenant.
 
-## Base URL
-
-The examples use:
-
-```text
-http://localhost:5000
-```
-
-In a deployed environment this is replaced by the customer's SaaS API URL.
-
 ## Response and error handling
 
 The most important rule for a customer integration is:
@@ -82,7 +72,27 @@ Business/application errors use this JSON shape:
 
 The `error` value is intended to be understandable to a human. Customers should not use the English error message as a machine-readable error code.
 
-Malformed JSON or framework-level failures may have a different response shape. Customers should therefore handle the HTTP status code first and retain the response body for diagnostics.
+For documented API errors, the following response shape is used:
+
+```json
+{
+  "error": "<message>"
+}
+```
+
+Customers should handle the HTTP status code first and use the `error` message for diagnostics or user-facing feedback where appropriate.
+
+Malformed JSON or framework-level failures may have a different response shape because they can be rejected before the application's API handlers run. Customers should therefore handle the HTTP status code first and retain the response body for diagnostics.
+
+Unexpected server-side failures return `500 Internal Server Error` with the stable response:
+
+```json
+{
+  "error": "An unexpected error occurred."
+}
+```
+
+The server does not expose the underlying exception, stack trace, or other internal implementation details in this response. The underlying error is logged internally for operators.
 
 ## POST /oauth/token
 
@@ -174,14 +184,31 @@ The response also contains a `Location` header pointing to `/api/rentals/{bookin
 
 ### Errors
 
-- `401 Unauthorized` — missing or invalid access token.
 - `400 Bad Request` — request or business rule rejected.
+- `401 Unauthorized` — missing or invalid access token.
+- `500 Internal Server Error` — unexpected server-side failure.
 
-Typical business error:
+Typical `400` business error:
 
 ```json
 {
   "error": "Booking number is already in use."
+}
+```
+
+Typical `401` response:
+
+```json
+{
+  "error": "A valid tenant access token is required."
+}
+```
+
+The `500` response is:
+
+```json
+{
+  "error": "An unexpected error occurred."
 }
 ```
 
@@ -229,9 +256,18 @@ HTTP `200 OK`.
 
 ### Errors
 
+- `400 Bad Request` — rental exists but the return violates a business rule or contains invalid request values.
 - `401 Unauthorized` — missing or invalid access token.
 - `404 Not Found` — booking does not exist for the authenticated tenant, including when another tenant owns it.
-- `400 Bad Request` — rental exists but the return violates a business rule.
+- `500 Internal Server Error` — unexpected server-side failure.
+
+Example `401`:
+
+```json
+{
+  "error": "A valid tenant access token is required."
+}
+```
 
 Example `404`:
 
@@ -249,6 +285,14 @@ Typical `400` messages include:
 - `Return time cannot be before pickup time.`
 - an argument error for an invalid odometer value;
 - an argument error for invalid pricing.
+
+The `500` response is:
+
+```json
+{
+  "error": "An unexpected error occurred."
+}
+```
 
 ## Customer integration flow
 
@@ -270,7 +314,7 @@ Customer application
        |
        +--> tenant-scoped rental operation
        |
-       +--> 2xx / 4xx response
+       +--> 2xx / 4xx / 5xx response
 ```
 
 The customer application owns its own persistence and UI. It only depends on the HTTP API and its documented JSON contracts.
@@ -288,7 +332,7 @@ The security log contains internal diagnostic context such as the requesting ten
 | Endpoint | Success | Errors |
 |---|---:|---|
 | `POST /oauth/token` | `200 OK` | `401 Unauthorized` |
-| `POST /api/rentals/pickup` | `201 Created` | `400 Bad Request`, `401 Unauthorized` |
-| `POST /api/rentals/{bookingNumber}/return` | `200 OK` | `400 Bad Request`, `401 Unauthorized`, `404 Not Found` |
+| `POST /api/rentals/pickup` | `201 Created` | `400 Bad Request`, `401 Unauthorized`, `500 Internal Server Error` |
+| `POST /api/rentals/{bookingNumber}/return` | `200 OK` | `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `500 Internal Server Error` |
 
 The public rental request/response types are defined in `src/CarRental.Contracts/RentalContracts.cs`. Tenant identity and JWT details are authentication concerns and are not part of those JSON rental DTOs.
