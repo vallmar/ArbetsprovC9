@@ -8,10 +8,10 @@ public sealed record Pricing
     public Pricing(decimal baseDailyPrice, decimal baseKmPrice)
     {
         if (baseDailyPrice < 0)
-            throw new ArgumentOutOfRangeException(nameof(baseDailyPrice));
+            throw new ArgumentOutOfRangeException(nameof(baseDailyPrice), "Base daily price cannot be negative.");
 
         if (baseKmPrice < 0)
-            throw new ArgumentOutOfRangeException(nameof(baseKmPrice));
+            throw new ArgumentOutOfRangeException(nameof(baseKmPrice), "Base kilometer price cannot be negative.");
 
         BaseDailyPrice = baseDailyPrice;
         BaseKmPrice = baseKmPrice;
