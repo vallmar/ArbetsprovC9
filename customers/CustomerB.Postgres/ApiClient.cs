@@ -14,28 +14,37 @@ public sealed class RentalApiClient
     };
 
     private readonly HttpClient client;
+    private readonly string clientId;
+    private readonly string clientSecret;
 
-    public RentalApiClient(string baseUrl, string tenantId)
+    public RentalApiClient(string baseUrl, string clientId, string clientSecret)
     {
         client = new HttpClient { BaseAddress = new Uri(baseUrl) };
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tenantId);
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
     }
 
     public async Task<RegisterPickupResponse> RegisterPickupAsync(
         CustomerRental rental,
         CancellationToken cancellationToken = default)
     {
-        using var response = await client.PostAsJsonAsync(
-            "/api/rentals/pickup",
-            new RegisterPickupRequest(
-                rental.BookingNumber,
-                rental.RegistrationNumber,
-                rental.CustomerId,
-                rental.Category,
-                rental.PickupTime,
-                rental.PickupOdometer),
-            CustomerJsonOptions,
-            cancellationToken);
+        var accessToken = await GetAccessTokenAsync(cancellationToken);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/rentals/pickup")
+        {
+            Content = JsonContent.Create(
+                new RegisterPickupRequest(
+                    rental.BookingNumber,
+                    rental.RegistrationNumber,
+                    rental.CustomerId,
+                    rental.Category,
+                    rental.PickupTime,
+                    rental.PickupOdometer),
+                options: CustomerJsonOptions)
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await client.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -46,6 +55,24 @@ public sealed class RentalApiClient
         return await response.Content.ReadFromJsonAsync<RegisterPickupResponse>(CustomerJsonOptions, cancellationToken)
             ?? throw new InvalidOperationException("The rental service returned an empty pickup response.");
     }
+
+    private async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "/oauth/token",
+            new { clientId, clientSecret },
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException("The authentication service rejected the customer credentials.");
+
+        var token = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("The authentication service returned an empty token response.");
+
+        return token.AccessToken;
+    }
+
+    private sealed record TokenResponse(string AccessToken, string TokenType, int ExpiresIn);
 }
 
 public sealed record CustomerRental(
