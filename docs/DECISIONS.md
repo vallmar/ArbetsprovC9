@@ -1,0 +1,51 @@
+# Architecture Decisions
+
+This file records decisions that explain why the project is structured the way it is. It is intentionally short and should grow only when an important architectural choice is made.
+
+## ADR-001: HTTP is the customer boundary
+
+**Decision:** Customers integrate with the SaaS through HTTP. Customer projects do not reference SaaS implementation projects.
+
+**Why:** The API is the actual product boundary. This keeps customer applications independent of internal implementation and lets their persistence and application models evolve independently.
+
+**Consequence:** Customer examples must behave like external clients and must not take shortcuts through shared Domain/Application/Infrastructure code.
+
+## ADR-002: Keep the core independent of infrastructure
+
+**Decision:** Domain has no project references. Application depends on Domain. Infrastructure implements application-defined infrastructure ports.
+
+**Why:** Business rules should not be coupled to a database or web framework, and infrastructure should be replaceable without rewriting the business model.
+
+**Consequence:** Persistence abstractions belong at the Application boundary; implementations belong in Infrastructure.
+
+## ADR-003: Public contracts are separate from the Domain
+
+**Decision:** Customer-facing request/response DTOs and enum values live in `CarRental.Contracts` rather than exposing Domain objects directly.
+
+**Why:** Internal domain evolution should not automatically change the public API.
+
+**Consequence:** Public API changes require coordinated changes to Contracts, API serialization, tests, customer examples where needed, and `docs/CUSTOMER_API.md`.
+
+## ADR-004: Prefer concrete designs over speculative abstractions
+
+**Decision:** Add abstractions only when there is a concrete reason such as a real boundary, multiple implementations, or a useful testing seam.
+
+**Why:** Unnecessary indirection makes a small system harder to understand and maintain without providing a real benefit.
+
+**Consequence:** The architecture intentionally does not introduce CQRS, MediatR, generic repositories, event sourcing, elaborate tenant frameworks, or similar patterns without a concrete requirement.
+
+## ADR-005: Technology baseline is .NET 8
+
+**Decision:** The repository uses the .NET 8 SDK baseline defined in `global.json` (`8.0.400`) and targets `net8.0`.
+
+**Why:** A fixed development baseline makes builds reproducible and prevents agents from changing framework versions as incidental cleanup.
+
+**Consequence:** SDK/framework upgrades are deliberate changes and should include an explicit reason and relevant documentation.
+
+## ADR-006: Observability starts simple
+
+**Decision:** Establish a simple baseline for request/operation observation and unexpected error logging before introducing advanced telemetry.
+
+**Why:** A service that cannot explain failures is difficult to operate and debug, even when its business logic is correct.
+
+**Consequence:** The first agent-driven observability task should focus on useful structured logging and clear distinction between expected business/API failures and unexpected application failures. It should avoid unnecessary logging frameworks or telemetry complexity.
