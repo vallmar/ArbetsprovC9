@@ -38,6 +38,17 @@ public class PriceCalculatorTests
         Assert.Equal(2850m, calculator.Calculate(rental, differentPricing));
     }
 
+    [Fact]
+    public void Rental_duration_uses_instants_not_local_clock_values()
+    {
+        var pickup = DateTimeOffset.Parse("2026-03-29T00:30:00+01:00");
+        var returnTime = DateTimeOffset.Parse("2026-03-29T04:30:00+02:00");
+        var rental = new Rental("B-DST", "ABC123", "customer-1", CarCategory.SmallCar, pickup, 10_000);
+        rental.Return(returnTime, 10_000);
+
+        Assert.Equal(500m, calculator.Calculate(rental, pricing));
+    }
+
     private static Rental ReturnedRental(CarCategory category, int days, int kilometers)
     {
         var rental = new Rental("B-1", "ABC123", "customer-1", category,
