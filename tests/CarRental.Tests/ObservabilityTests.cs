@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using CarRental.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -18,7 +17,7 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     [Fact]
-    public async Task Unexpected_exception_returns_500_without_internal_details_and_is_logged()
+    public async Task Unexpected_exception_returns_sanitized_500_and_is_logged()
     {
         var logSink = new TestLogSink();
         var client = factory.WithWebHostBuilder(builder =>
@@ -30,26 +29,32 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
             });
         }).CreateClient();
 
-        var response = await client.PostAsJsonAsync(
-            "/api/rentals/pickup",
-            new RegisterPickupRequest(
-                "OBSERVABILITY-001",
-                "ABC123",
-                "customer-a",
-                ContractCarCategory.SmallCar,
-                DateTimeOffset.Parse("2026-09-15T10:00:00Z"),
-                10000),
-            TestContext.Current.CancellationToken);
+        var response = await client.GetAsync("/api/test/unhandled-error", TestContext.Current.CancellationToken);
 
-        // The current in-memory implementation is not expected to throw here, so this test
-        // validates the global handler by requesting an intentionally invalid endpoint instead.
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.NotNull(body);
+        Assert.Equal("An unexpected error occurred.", body!.Error);
+        Assert.DoesNotContain("Intentional test exception", body.Error);
+        Assert.DoesNotContain("InvalidOperationException", body.Error);
+
+        Assert.Contains(
+            logSink.Entries,
+            entry => entry.LogLevel == LogLevel.Error
+                      && entry.Message.Contains("Unhandled exception while processing GET /api/test/unhandled-error"));
+
+        Assert.Contains(
+            logSink.Entries,
+            entry => entry.Exception?.Message == "Intentional test exception.");
     }
 
     private sealed class TestLogSink
     {
-        public List<string> Messages { get; } = [];
+        public List<LogEntry> Entries { get; } = [];
     }
+
+    private sealed record LogEntry(LogLevel LogLevel, string Message, Exception? Exception);
 
     private sealed class TestLoggerProvider(TestLogSink sink) : ILoggerProvider
     {
@@ -64,7 +69,7 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
-        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+        public bool IsEnabled(LogLevel logLevel) => true;
 
         public void Log<TState>(
             LogLevel logLevel,
@@ -73,7 +78,7 @@ public sealed class ObservabilityTests : IClassFixture<WebApplicationFactory<Pro
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            sink.Messages.Add(formatter(state, exception));
+            sink.Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
         }
     }
 
