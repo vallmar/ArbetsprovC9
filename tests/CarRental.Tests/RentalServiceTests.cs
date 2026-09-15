@@ -2,6 +2,7 @@ using CarRental.Application.Ports;
 using CarRental.Application.Pricing;
 using CarRental.Application.Rentals;
 using CarRental.Domain;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CarRental.Tests;
@@ -31,7 +32,7 @@ public sealed class RentalServiceTests
     }
 
     private static RentalService CreateService(InMemoryTestRepository repository, string tenantId)
-        => new(repository, new PriceCalculator(), new TestTenantContext(tenantId));
+        => new(repository, new PriceCalculator(), new TestTenantContext(tenantId), NullLogger<RentalService>.Instance);
 
     private sealed class TestTenantContext(string tenantId) : ITenantContext
     {
@@ -44,6 +45,12 @@ public sealed class RentalServiceTests
 
         public Task<Rental?> GetByBookingNumberAsync(string tenantId, string bookingNumber, CancellationToken cancellationToken = default)
             => Task.FromResult(Items.GetValueOrDefault((tenantId, bookingNumber)));
+
+        public Task<string?> GetOwnerTenantIdByBookingNumberAsync(string bookingNumber, CancellationToken cancellationToken = default)
+        {
+            var match = Items.Keys.FirstOrDefault(key => key.BookingNumber == bookingNumber);
+            return Task.FromResult(match == default ? null : match.TenantId);
+        }
 
         public Task AddAsync(Rental rental, CancellationToken cancellationToken = default)
         {
