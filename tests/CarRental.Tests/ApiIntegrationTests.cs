@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CarRental.Contracts;
@@ -58,26 +59,34 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
     }
 
     [Fact]
-    public async Task Pickup_accepts_string_car_category_from_customer_json()
+    public async Task Pickup_accepts_documented_json_structure_and_case_insensitive_property_names()
     {
         var bookingNumber = NewBookingNumber();
-        var json = JsonSerializer.Serialize(new
-        {
-            bookingNumber,
-            registrationNumber = "ABC123",
-            customerIdentifier = "customer-a",
-            category = "SmallCar",
-            pickupTime = "2026-09-15T10:00:00Z",
-            pickupOdometer = 10000
-        }, CustomerJsonOptions);
+        var json = $"""
+        {{
+            "BOOKINGNUMBER": "{bookingNumber}",
+            "RegistrationNumber": "ABC123",
+            "customerIdentifier": "customer-a",
+            "CATEGORY": "smallcar",
+            "PickupTime": "2026-09-15T10:00:00Z",
+            "pickupOdometer": 10000
+        }}
+        """;
 
-        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await client.PostAsync("/api/rentals/pickup", content, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var body = await ReadCustomerJsonAsync<RegisterPickupResponse>(response);
-        Assert.NotNull(body);
-        Assert.Equal(ContractCarCategory.SmallCar, body!.Category);
+
+        using var responseJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = responseJson.RootElement;
+        Assert.Equal(bookingNumber, root.GetProperty("bookingNumber").GetString());
+        Assert.Equal("ABC123", root.GetProperty("registrationNumber").GetString());
+        Assert.Equal("customer-a", root.GetProperty("customerIdentifier").GetString());
+        Assert.Equal("SmallCar", root.GetProperty("category").GetString());
+        Assert.Equal("2026-09-15T10:00:00+00:00", root.GetProperty("pickupTime").GetString());
+        Assert.Equal(10000, root.GetProperty("pickupOdometer").GetInt32());
+        Assert.False(root.GetProperty("isReturned").GetBoolean());
     }
 
     [Fact]
@@ -93,6 +102,32 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         Assert.NotNull(body);
         Assert.Equal(bookingNumber, body!.BookingNumber);
         Assert.Equal(850m, body.FinalPrice);
+    }
+
+    [Fact]
+    public async Task Return_accepts_documented_json_structure_and_case_insensitive_property_names()
+    {
+        var bookingNumber = NewBookingNumber();
+        await RegisterPickupAsync(bookingNumber, ContractCarCategory.Combi, 10000);
+
+        var json = """
+        {
+            "RETURNTIME": "2026-09-15T18:00:00Z",
+            "ReturnOdometer": 10100,
+            "baseDailyPrice": 500,
+            "BASEKMP RICE": 2
+        }
+        """.Replace("BASEKMP RICE", "BASEKMPRICE");
+
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var response = await client.PostAsync($"/api/rentals/{bookingNumber}/return", content, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var responseJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = responseJson.RootElement;
+        Assert.Equal(bookingNumber, root.GetProperty("bookingNumber").GetString());
+        Assert.Equal(850m, root.GetProperty("finalPrice").GetDecimal());
     }
 
     [Fact]
