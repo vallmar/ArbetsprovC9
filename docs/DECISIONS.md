@@ -48,12 +48,28 @@ This file records decisions that explain why the project is structured the way i
 
 **Why:** A service that cannot explain failures is difficult to operate and debug, even when its business logic is correct.
 
-**Consequence:** The first agent-driven observability task should focus on useful structured logging and clear distinction between expected business/API failures and unexpected application failures. It should avoid unnecessary logging frameworks or telemetry complexity.
+**Consequence:** The service uses the built-in `ILogger` abstraction. Unexpected failures are logged at Error level, while blocked cross-tenant access is logged as a structured Warning. No logging framework or telemetry platform is required yet.
 
-## ADR-007: Tenant identity is transport context, not rental data
+## ADR-007: Tenant identity comes from validated authentication context
 
-**Decision:** The simplified multi-tenant demonstration uses `Authorization: Bearer <tenantId>` to establish tenant context. The tenant identifier is not added to the customer JSON request contracts.
+**Decision:** Tenant identity is established by a validated JWT bearer access token. The token's trusted `client_id` claim becomes the tenant identity exposed through `ITenantContext`.
 
-**Why:** Tenant identity belongs to the request/authentication boundary, while booking number, customer identifier and vehicle data are business payload. Keeping them separate also makes it straightforward to replace the fake bearer value with a real validated token claim later.
+**Why:** Tenant identity must not be caller-controlled business data. JWT validation gives the API a standard authentication boundary and lets the application remain independent of JWT details.
 
-**Consequence:** `ITenantContext` is an application boundary. The API populates it from the HTTP header, while the application service and repository scope rental operations to that tenant. This is deliberately a tenant-isolation demonstration, not real authentication.
+**Consequence:** `CarRental.Api` owns authentication and token-to-tenant translation. `CarRental.Application` consumes only `ITenantContext`. Customer JSON contracts contain no tenant identifier.
+
+## ADR-008: Showcase token issuer is intentionally local and limited
+
+**Decision:** The API includes a small `/oauth/token` endpoint solely to make the showcase self-contained. It validates two hardcoded demo client credentials and issues short-lived signed JWTs using a development-only signing key from configuration.
+
+**Why:** The purpose is to demonstrate realistic JWT validation and tenant propagation without introducing a full identity provider into a small reference project.
+
+**Consequence:** This is not production authentication infrastructure. A real deployment would use an external OAuth 2.0/OIDC identity provider and the API would validate tokens issued by that provider.
+
+## ADR-009: Cross-tenant access attempts are security events
+
+**Decision:** When a tenant requests a booking number that exists under another tenant, the application logs a structured Warning containing the requesting tenant, booking number, and owning tenant, while still returning `404 Not Found` externally.
+
+**Why:** The attempted access is operationally important and may indicate a client bug, misconfiguration, or malicious behaviour. At the same time, returning `404` prevents the API from disclosing whether another tenant owns the booking.
+
+**Consequence:** The repository has a narrowly scoped ownership lookup used only after a tenant-scoped lookup misses. Normal tenant reads remain tenant-scoped.
