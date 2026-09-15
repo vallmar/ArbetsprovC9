@@ -1,0 +1,12 @@
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.AssemblyInfoInputs.cache
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.AssemblyInfo.cs
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.csproj.CoreCompileInputs.cache
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.sourcelink.json
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\bin\Debug\net8.0\CarRental.Domain.deps.json
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\bin\Debug\net8.0\CarRental.Domain.dll
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\bin\Debug\net8.0\CarRental.Domain.pdb
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.dll
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\refint\CarRental.Domain.dll
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\CarRental.Domain.pdb
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Domain\obj\Debug\net8.0\ref\CarRental.Domain.dll

@@ -1,0 +1,6 @@
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Application\obj\Debug\net8.0\CarRental.Application.csproj.AssemblyReference.cache
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Application\obj\Debug\net8.0\CarRental.Application.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Application\obj\Debug\net8.0\CarRental.Application.AssemblyInfoInputs.cache
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Application\obj\Debug\net8.0\CarRental.Application.AssemblyInfo.cs
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Application\obj\Debug\net8.0\CarRental.Application.csproj.CoreCompileInputs.cache
+C:\Users\marku\source\repos\activelogin-biluthyrning\activelogin-biluthyrning\src\CarRental.Application\obj\Debug\net8.0\CarRental.Application.sourcelink.json
