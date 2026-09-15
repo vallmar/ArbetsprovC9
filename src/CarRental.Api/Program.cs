@@ -9,6 +9,7 @@ using CarRental.Contracts;
 using CarRental.Domain;
 using CarRental.Infrastructure.InMemory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 
