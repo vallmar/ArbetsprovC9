@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -34,6 +35,17 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.True(response.Headers.WwwAuthenticate.Any(h => h.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public async Task Invalid_access_token_is_rejected()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/test/unhandled-error");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "not-a-jwt");
+
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -115,7 +127,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/rentals/pickup") { Content = content };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "tenant-a");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetAccessTokenAsync("tenant-a"));
         var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -163,7 +175,7 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rentals/{bookingNumber}/return") { Content = content };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "tenant-a");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetAccessTokenAsync("tenant-a"));
         var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -244,9 +256,25 @@ public sealed class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         {
             Content = JsonContent.Create(value, options: CustomerJsonOptions)
         };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tenantId);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await GetAccessTokenAsync(tenantId));
         return await client.SendAsync(request, TestContext.Current.CancellationToken);
     }
+
+    private async Task<string> GetAccessTokenAsync(string tenantId)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "/oauth/token",
+            new { clientId = tenantId, clientSecret = $"secret-{tenantId[^1]}" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var token = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotNull(token);
+        Assert.Equal("Bearer", token!.TokenType);
+        return token.AccessToken;
+    }
+
+    private sealed record TokenResponse(string AccessToken, string TokenType, int ExpiresIn);
 
     private static Task<T?> ReadCustomerJsonAsync<T>(HttpResponseMessage response)
         => response.Content.ReadFromJsonAsync<T>(CustomerJsonOptions);
