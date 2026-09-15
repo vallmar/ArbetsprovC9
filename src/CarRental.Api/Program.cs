@@ -94,6 +94,10 @@ app.MapPost("/api/rentals/{bookingNumber}/return", async (string bookingNumber, 
     }
 });
 
+#if DEBUG
+app.MapGet("/api/test/unhandled-error", () => throw new InvalidOperationException("Intentional test exception."));
+#endif
+
 app.Run();
 
 public partial class Program
