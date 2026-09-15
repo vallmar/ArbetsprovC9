@@ -17,7 +17,8 @@ public class RentalTests
     public void Return_odometer_cannot_be_lower_than_pickup_odometer()
     {
         var rental = CreateRental();
-        Assert.Throws<ArgumentOutOfRangeException>(() => rental.Return(rental.PickupTime.AddDays(1), rental.PickupOdometer - 1));
+        var exception = Assert.Throws<ArgumentException>(() => rental.Return(rental.PickupTime.AddDays(1), rental.PickupOdometer - 1));
+        Assert.Equal("Return odometer cannot be lower than pickup odometer.", exception.Message);
     }
 
     [Fact]
